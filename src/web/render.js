@@ -196,9 +196,10 @@
     R.drawLabels(g, list, v);
     R.drawFx(g, v, opts.now ?? performance.now());
     if (opts.hud !== false) R.drawHud(g, frame.hud, v, opts.hudTop ?? 8);
-    R.uiRects = R.drawUi(g, frame.ui, v, opts.mouse);
     if (frame.effect) R.drawEffect(g, frame.effect, v, frame.tick || 0);
     if (frame.screen && opts.screen !== false) R.drawScreen(g, frame.screen, v, frame.tick || 0);
+    // UI goes on top, so title and game-over screens can have buttons.
+    R.uiRects = R.drawUi(g, frame.ui, v, opts.mouse);
   };
 
   // ---- labels above entities ----

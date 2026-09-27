@@ -60,7 +60,10 @@ pub unsafe extern "C" fn fg_load(p: *mut u8, n: usize) -> u32 {
         Ok(mut w) => {
             let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
             w.level = v["level_name"].as_str().unwrap_or("").to_string();
+            let start = w.clone();
             let mut sim = Sim::new(w);
+            // The level as it starts, so goto_level(level()) restarts it.
+            sim.levels.insert(start.level.clone(), start);
             for (name, lv) in v["levels"].as_object().into_iter().flatten() {
                 if let Ok(mut lw) = World::from_bundle(lv) {
                     lw.level = name.clone();

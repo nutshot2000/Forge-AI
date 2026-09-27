@@ -62,6 +62,19 @@ and never see a fraction.
 camera view. Through MCP it comes back as an image, so any agent that can see images can check the art and layout.
 Options: `"view":"map"` for the whole map, `"area":[x,y,w,h]`, `"scale"`, `"save":"shot.png"`.
 
+## Mouse, UI and game feel
+
+- **Mouse:** `mouse_x()`/`mouse_y()` (map tiles), `mouse_down("left")`, `mouse_pressed`, `hovered()`, `fn on_click(me)`.
+- **UI:** `ui("hp", #{type: "bar", x: 2, y: 5, w: 20, h: 3, value: 5, max: 5})`; types text, panel, bar, button
+  (→ `fn on_ui(name)`), image; screen percent or `space: "world"`. Entity `label` props.
+- **Juice:** `particles("explosion", x, y)` (explosion dust sparkle smoke hit confetti splash trail fire),
+  `float_text`, `flash`, `fade_out`/`fade_in`, `freeze(ticks)` hit-stop, `camera_shake`.
+- **Aiming:** `angle_to_point`, `vel_from_angle`, `move_forward`, `turn_toward`; sprites rotate with `angle`.
+- **Cheap bullets:** `lifetime` and `die_on_wall` props, handled by the engine.
+
+Demo: `worlds/neon-swarm`, a mouse-aimed arena shooter with waves, three enemy types, a title screen, HUD and
+game over (`examples/make_neon_swarm.py`; `examples/bot_neon_swarm.py` plays it).
+
 ## Level checks
 
 `{"cmd":"check"}` (or 🩺 Check in the editor) lists problems with where they are: pickups and goals the player can't

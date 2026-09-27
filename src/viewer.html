@@ -411,10 +411,13 @@ function show(f, jumped) {
     if (ev.kind === 'fx' && ev.data) FR.spawnFx(ev.data);
   }
   if (f.note) logNote(f, true);
-  if ($('showev').checked) for (const ev of f.events || []) logEvent(f.tick, ev);
+  if ($('showev').checked) for (const ev of f.events || []) if (!QUIET.has(ev.kind)) logEvent(f.tick, ev);
   for (const ev of f.events || []) addPulse(ev);
 }
+// Events that are noise in the log / already have their own visuals.
+const QUIET = new Set(['fx', 'sfx', 'click', 'crashed', 'ui_click']);
 function addPulse(ev) {
+  if (QUIET.has(ev.kind)) return;
   const d = ev.data || {};
   let x = d.x, y = d.y;
   if (typeof x !== 'number') {
@@ -496,7 +499,7 @@ function draw(now) {
   TS = V.s;
   const t = prev ? Math.min(1, (now - lastAdvance) / (1000 / replaySpeed())) : 1;
   FR.drawFrame(ctx, cur, rows, V, {
-    prev, t, now, hudTop: 56, mouse: gameMouse,
+    prev, t, now, hudTop: es && es.playing ? 8 : 56, mouse: gameMouse,
     skip: drag ? drag.id : null,
     tileAt: paint ? (x, y, ch) => paint.cells.has(x + ',' + y) ? paint.tile : ch : null,
   });
@@ -581,6 +584,8 @@ function draw(now) {
   $('agent').textContent = active ? '🤖 agent working…' : '🤖 agent idle';
   const gameKeys = es && es.playing && !typing();
   $('banner').style.display = gameKeys ? 'block' : 'none';
+  // Editing tools are hidden while the game runs, so they don't cover its UI.
+  document.querySelector('.tools').style.display = es && es.playing ? 'none' : '';
   $('view').classList.toggle('gamefocus', !!gameKeys);
   $('viewbtn').textContent = { auto: `🎥 ${m === 'game' ? 'Game' : 'Edit'} view (auto)`, edit: '🗺 Edit view', game: '🎥 Game view' }[viewMode];
 }

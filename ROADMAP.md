@@ -80,10 +80,10 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 - ☐ **P3.2 Pixel editor** in the editor: pencil, fill, mirror, palette, frames timeline, onion skin, plus "ask the agent to draw/edit this".
 - ☐ **P3.3 Sprite sheets:** import a sheet image and slice it into frames; export sheets.
 - ☐ **P3.4 Tilesets and autotiling:** walls pick the right edge/corner piece automatically; 16×16/32×32 tile sizes.
-- ☐ **P3.5 Particles:** dust, sparks, explosions, rain, defined as short text presets (`particles("explosion", x, y)`).
+- ☑ **P3.5 Particles:** dust, sparks, explosions, rain, defined as short text presets (`particles("explosion", x, y)`).
 - ◐ **P3.6 Sound effects:** synthesized from parameters (jsfxr-style), so the agent can design sounds as text; `sfx("jump")`; import `.wav`/`.ogg`. (Done: `sound` recipes + 9 presets, `sfx()`, mute button, plays in exported games. To do: importing audio files.)
 - ☐ **P3.7 Music:** a tiny text tracker format the agent can compose in; loops, per-level music, fade.
-- ☐ **P3.8 Text and fonts:** pixel fonts, in-world text, floating damage numbers.
+- ◐ **P3.8 Text and fonts:** pixel fonts, in-world text, floating damage numbers. (Done: UI text, labels, float_text. To do: pixel fonts.)
 - ☐ **P3.9 Lighting and effects (stretch):** darkness, light radius, simple shaders (flash, outline, palette swap).
 - ☐ **P3.10 Palettes and style lock:** a project palette/style guide the agent follows so all art matches.
 
@@ -91,7 +91,7 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 
 - ☑ **P4.1 Scenes and levels:** multiple maps per project, `goto("level2")`, doors/portals, level list and ordering in the editor.
 - ◐ **P4.2 Game flow:** title screen, pause menu, game over, win screen, credits, built from simple text UI definitions. (Done: show_screen overlays, levels via goto_level. To do: menus with choices.)
-- ☐ **P4.3 UI system:** buttons, bars, text boxes, inventory grids, defined in text, laid out automatically, clickable in-game.
+- ◐ **P4.3 UI system:** buttons, bars, text boxes, inventory grids, defined in text, laid out automatically, clickable in-game. (Done: text, panels, bars, buttons, images in screen or world space. To do: layout helpers, inventory grids.)
 - ☐ **P4.4 Dialogue:** conversation trees with choices and conditions, in a readable text format.
 - ◐ **P4.5 Game state and saves:** variables that persist across levels; save/load slots. (Done: game()/set_game() values that carry across levels. To do: save slots.)
 - ☑ **P4.6 Timers, tweens and coroutines:** `after(30, || ...)`, `every(60, ...)`, smooth movement tweens, wait-until.
