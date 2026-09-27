@@ -2,6 +2,7 @@
 //! editor host and MCP server live in the `forge` binary) and to WebAssembly (the web
 //! player used for exported games, in `web/`).
 
+pub mod check;
 pub mod physics;
 pub mod raster;
 pub mod sim;

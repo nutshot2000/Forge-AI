@@ -56,6 +56,27 @@ impl Entity {
             .unwrap_or('?')
     }
 
+    /// Physics entities get the flags the engine maintains from the start, so scripts can read
+    /// `on_ground`, `hit_wall`... on their very first tick.
+    pub fn init_physics_props(&mut self) {
+        let dynamic = match self.props.get("physics") {
+            Some(Value::String(s)) => s != "kinematic" && s != "none" && !s.is_empty(),
+            Some(Value::Bool(b)) => *b,
+            _ => false,
+        };
+        let kinematic = self.props.get("physics").and_then(Value::as_str) == Some("kinematic");
+        if dynamic || kinematic {
+            for (k, v) in [("vx", json!(0.0)), ("vy", json!(0.0))] {
+                self.props.entry(k.into()).or_insert(v);
+            }
+        }
+        if dynamic {
+            for (k, v) in [("on_ground", json!(false)), ("hit_wall", json!(0)), ("hit_ceiling", json!(false)), ("on_ladder", json!(false))] {
+                self.props.entry(k.into()).or_insert(v);
+            }
+        }
+    }
+
     /// Every script this entity runs: its `script`, then each name in its `behaviors` list.
     pub fn scripts(&self) -> Vec<String> {
         let mut out: Vec<String> = self.script.iter().cloned().collect();
@@ -561,7 +582,9 @@ impl World {
         let id = self.next_id;
         self.next_id += 1;
         let script = props.remove("script").and_then(|v| v.as_str().map(String::from));
-        self.entities.insert(id, Entity { kind: kind.into(), x, y, script, props });
+        let mut e = Entity { kind: kind.into(), x, y, script, props };
+        e.init_physics_props();
+        self.entities.insert(id, e);
         id
     }
 

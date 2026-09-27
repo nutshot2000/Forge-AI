@@ -943,6 +943,9 @@ impl App {
                         e.props.insert(key.to_string(), v);
                     }
                 }
+                if key == "physics" {
+                    e.init_physics_props();
+                }
                 Ok(json!({ "entity": World::entity_json(id, e) }))
             }
             "create" => {
@@ -1303,6 +1306,17 @@ impl App {
                     }
                 }
                 Ok(json!({ "installed": installed, "kept_existing": kept, "attached_to": attached }))
+            }
+            "check" => {
+                let issues = {
+                    let w = self.sim.world.borrow();
+                    crate::check::check(&w, &self.sim.compile_errors, &|name| self.sim.load_level(name).is_ok())
+                };
+                let count = |sev: &str| issues.iter().filter(|i| i.severity == sev).count();
+                Ok(json!({
+                    "summary": { "errors": count("error"), "warnings": count("warning"), "info": count("info") },
+                    "issues": issues.iter().map(|i| i.json()).collect::<Vec<_>>(),
+                }))
             }
             "screenshot" => {
                 let w = self.sim.world.borrow();

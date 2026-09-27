@@ -128,9 +128,9 @@ The part that makes forge different from other engines.
 
 **Testing and balancing**
 - ☐ **P6.8 Play bots:** built-in bot players (random, explorer, goal-seeker, "speedrunner") the agent points at a level to test it.
-- ☐ **P6.9 Level checks:** reachability (can every coin/exit be reached?), soft-locks, stuck entities, entities inside walls.
+- ☑ **P6.9 Level checks:** reachability (can every coin/exit be reached?), soft-locks, stuck entities, entities inside walls.
 - ☐ **P6.10 Balancing sweeps:** try a range of values (enemy speed 1–5 × damage 1–3) over many runs and report the best settings; charts in the editor.
-- ☐ **P6.11 Game health panel:** a continuous validator (script errors, missing sprites, unused assets, unreachable areas, performance) as clickable issues with "ask the agent to fix".
+- ◐ **P6.11 Game health panel:** a continuous validator (script errors, missing sprites, unused assets, unreachable areas, performance) as clickable issues with "ask the agent to fix". (Done: 🩺 Check button + Health tab. To do: runs automatically, performance.)
 - ☐ **P6.12 Replays:** record a play session (yours or a bot's) and replay it exactly; attach replays to bug requests ("this happened").
 
 **Knowing the project**

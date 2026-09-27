@@ -40,6 +40,7 @@ pub const COMMANDS: &[Cmd] = &[
         opt("since", "int", "event seq to start after"), opt("kinds", "array", "only these event kinds"), opt("max_events", "int", "default 50")] },
     Cmd { name: "diff", group: "see", desc: "What changed between a snapshot and now (or another snapshot).", args: &[
         req("from", "string", "snapshot name"), opt("to", "string", "snapshot name; default the current world")] },
+    Cmd { name: "check", group: "see", desc: "Find problems: pickups/goals the player can't reach (a jump model for platformers, walking for top-down), missing sprites/scripts/sounds/levels, broken button targets, things stuck in walls or outside the map, script errors, unused assets. Each issue has a severity and where it is.", args: &[] },
     Cmd { name: "screenshot", group: "see", desc: "A PNG of the game (tiles, sprites, animation frame, background, entities) so you can SEE it. Through MCP it arrives as an image. Default: what the player sees through the camera (the whole map if there's no camera).", args: &[
         opt("view", "string", "camera (default) | map"), opt("area", "array", "[x, y, w, h] in tiles, instead"),
         opt("scale", "number", "pixels per tile (default: the world's tile size, shrunk for big maps)"),

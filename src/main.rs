@@ -14,7 +14,7 @@ mod mcp;
 mod viewer;
 
 // The core lives in the library crate; these keep `crate::world` etc. working here.
-use forge::{physics, raster, sim, world};
+use forge::{check, physics, raster, sim, world};
 
 use app::App;
 use serde_json::{json, Value};

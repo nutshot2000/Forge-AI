@@ -62,6 +62,13 @@ and never see a fraction.
 camera view. Through MCP it comes back as an image, so any agent that can see images can check the art and layout.
 Options: `"view":"map"` for the whole map, `"area":[x,y,w,h]`, `"scale"`, `"save":"shot.png"`.
 
+## Level checks
+
+`{"cmd":"check"}` (or 🩺 Check in the editor) lists problems with where they are: pickups and goals the player can't
+reach (a jump model for platformers, walking for top-down), missing sprites/scripts/sounds/levels, unwired buttons,
+things stuck in walls or off the map, script errors and unused assets. It found three real bugs in the first Skyward
+(a slime inside a hill, a ladder blocked by a ledge, and a flag too high to reach); `worlds/skyward-2` is the fixed one.
+
 ## Building whole games
 
 - **Behaviour library:** `{"cmd":"behaviors"}` lists ready-made scripts: platformer_player, topdown_player, patrol,

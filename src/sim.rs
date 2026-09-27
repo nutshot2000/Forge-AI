@@ -92,6 +92,9 @@ fn build_engine(w: &W) -> Engine {
                 en.props.insert(key.to_string(), to_json(&v));
             }
         }
+        if key == "physics" {
+            en.init_physics_props();
+        }
         Ok(())
     });
     reg!(e, w, "create", move |kind: &str, x: Dynamic, y: Dynamic| -> RR<i64> {

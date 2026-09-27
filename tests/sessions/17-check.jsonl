@@ -1,0 +1,12 @@
+# Level checks: a world with deliberate mistakes, then fixed.
+{"cmd":"new","map":["##########","#........#","#........#","#....#####","#....#...#","##########"]}
+{"cmd":"physics","preset":"topdown"}
+{"cmd":"sprite","name":"unused","palette":{"a":"#fff"},"pixels":["a"]}
+{"cmd":"batch","commands":[{"cmd":"create","kind":"hero","x":1,"y":1,"props":{"physics":true,"tags":["player"]}},{"cmd":"create","kind":"coin","x":2,"y":2,"props":{"tags":["pickup"]}},{"cmd":"create","kind":"coin","x":7,"y":4,"props":{"tags":["pickup"]}},{"cmd":"create","kind":"rock","x":5,"y":3,"props":{"physics":true}},{"cmd":"create","kind":"ghost","x":20,"y":1},{"cmd":"create","kind":"thing","x":3,"y":1,"props":{"sprite":"nope","behaviors":["dance"]}},{"cmd":"create","kind":"switch","x":1,"y":4,"props":{"behaviors":["button"]}},{"cmd":"create","kind":"door","x":2,"y":4,"props":{"next":"level_99"}}]}
+{"cmd":"use_behavior","name":"button"}
+{"cmd":"check","expect":{"summary":{"errors":3,"warnings":4,"info":2}}}
+{"cmd":"check","expect":{"issues":[{"kind":"stuck_in_wall","id":4},{"kind":"outside_map","id":5},{"kind":"missing_script","id":6},{"kind":"missing_sprite","id":6},{"kind":"broken_link","id":7},{"kind":"missing_level","id":8},{"kind":"missing_sound"},{"kind":"unreachable","id":3,"at":[7,4]},{"kind":"unused_sprite"}]}}
+
+# fix everything the check found
+{"cmd":"batch","commands":[{"cmd":"set","id":6,"key":"behaviors","value":null},{"cmd":"set","id":6,"key":"sprite","value":null},{"cmd":"set","id":7,"key":"target","value":8},{"cmd":"set","id":8,"key":"next","value":null},{"cmd":"set","id":4,"key":"x","value":3},{"cmd":"destroy","id":5},{"cmd":"paint","tile":".","cells":[[6,3]]},{"cmd":"sound","name":"blip","preset":"blip"},{"cmd":"sprite","name":"unused","delete":true}]}
+{"cmd":"check","expect":{"summary":{"errors":0,"warnings":0,"info":1},"issues":[{"kind":"reachable"}]}}

@@ -154,6 +154,11 @@
   .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
   .modal .primary { background: #2a3a66; border-color: var(--accent); }
   #drop { position: fixed; inset: 0; z-index: 25; display: none; place-items: center; background: #7aa2ff22; border: 3px dashed var(--accent); font-size: 18px; color: var(--text); pointer-events: none; }
+  #issues { list-style: none; margin: 0; padding: 6px 0; }
+  #issues li { padding: 5px 12px; border-bottom: 1px solid #1c1f28; display: flex; gap: 10px; align-items: baseline; cursor: pointer; font-size: 13px; }
+  #issues li:hover { background: #1c2130; }
+  #issues .sev { font-size: 11px; padding: 0 8px; border-radius: 99px; border: 1px solid; flex: none; }
+  #issues .error .sev { color: var(--bad); } #issues .warning .sev { color: var(--warn); } #issues .info .sev { color: var(--dim); }
   #reqs { list-style: none; margin: 0; padding: 6px 0; }
   #reqs li { padding: 6px 12px; border-bottom: 1px solid #1c1f28; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; cursor: pointer; }
   #reqs li:hover { background: #1c2130; }
@@ -194,6 +199,7 @@
     <button id="import" title="Import images, maps, scripts or worlds (or drag files onto the editor)">📂 Import</button>
     <button id="export" title="Download the world, map or sprites">⤓ Export</button>
     <input type="file" id="file" multiple hidden accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.json,.tmj,.txt,.csv,.rhai">
+    <button id="checkbtn" title="Check the level for problems">🩺 Check</button>
     <button id="mute" title="Game sounds on/off">🔊</button>
     <span class="spacer"></span>
     <span class="pill" id="agent">🤖 agent idle</span>
@@ -239,6 +245,7 @@
       <button data-tab="activity" class="on">Activity</button>
       <button data-tab="scripts">Scripts</button>
       <button data-tab="requests">Requests<span class="badge" id="rbadge" hidden></span></button>
+      <button data-tab="health">Health<span class="badge" id="hbadge" hidden></span></button>
       <button data-tab="assets">Assets</button>
       <button data-tab="console">Console</button>
       <span class="right"><label><input type="checkbox" id="showev" checked> tick events</label></span>
@@ -255,6 +262,7 @@
       </div>
     </div>
     <div class="pane scroll" id="requests"><ul id="reqs"></ul></div>
+    <div class="pane scroll" id="health"><ul id="issues"></ul></div>
     <div class="pane" id="assets"></div>
     <div class="pane" id="console">
       <pre id="cout">Type Rhai code to run against the live world, e.g.  count("coin")
@@ -1353,6 +1361,32 @@ function renderProposals() {
     box.append(card);
   }
 }
+
+// ---------- level health (check) ----------
+async function runCheck() {
+  const r = await cmd({ cmd: 'check' });
+  if (!r.ok) return toast('Check failed: ' + r.error, 'you');
+  const ul = $('issues'); ul.innerHTML = '';
+  const order = { error: 0, warning: 1, info: 2 };
+  for (const i of r.issues.sort((a, b) => order[a.severity] - order[b.severity])) {
+    const li = document.createElement('li'); li.className = i.severity;
+    li.innerHTML = '<span class="sev"></span><span></span>';
+    li.firstChild.textContent = i.severity; li.lastChild.textContent = i.message;
+    li.onclick = () => {
+      if (i.id != null) select(i.id);
+      const e = i.id != null && es.entities.find(e => e.id === i.id);
+      const at = i.at || (e ? [Math.floor(e.x), Math.floor(e.y)] : null);
+      if (at) markers.push({ x: at[0], y: at[1], label: i.kind.replace(/_/g, ' '), t0: performance.now() });
+    };
+    ul.append(li);
+  }
+  if (!r.issues.length) ul.innerHTML = '<div class="muted">No problems found. ✓</div>';
+  const n = r.summary.errors + r.summary.warnings;
+  $('hbadge').hidden = !n; $('hbadge').textContent = n;
+  showTab('health');
+  toast(`Check: ${r.summary.errors} errors, ${r.summary.warnings} warnings, ${r.summary.info} notes`, 'you');
+}
+$('checkbtn').onclick = runCheck;
 
 // ---------- requests ----------
 let reqKey = '', reqSeen = null;

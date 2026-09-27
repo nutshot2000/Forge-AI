@@ -26,15 +26,16 @@ fill('#', W - 1, 0, 1, H)    # right wall
 fill('#', 8, 12, 3, 2)
 fill('#', 22, 11, 4, 3)
 fill('#', 38, 12, 2, 2)
-fill('#', 55, 10, 6, 4)
+fill('#', 53, 12, 2, 2)     # a step up...
+fill('#', 55, 11, 6, 3)     # ...to the final block (3 high: jumpable)
 # one-way wooden platforms
 fill('=', 12, 10, 4, 1)
 fill('=', 18, 8, 3, 1)
 fill('=', 27, 9, 3, 1)
 fill('=', 41, 9, 4, 1)
-# a ladder up to a high ledge with coins
-fill('H', 35, 6, 1, 8)
+# a ladder up to a high ledge with coins (the ladder goes through the ledge so you can climb onto it)
 fill('#', 32, 5, 7, 1)
+fill('H', 35, 5, 1, 9)
 # spikes
 fill('^', 25, 10, 1, 1)
 fill('^', 44, 13, 2, 1)
@@ -279,15 +280,15 @@ c({"cmd": "prefab", "name": "lift", "props": {"kind": "lift", "script": "mover",
 
 # --- level ---
 c({"cmd": "create", "prefab": "player", "x": 2, "y": 13.1})
-for x, y in [(9, 12.3), (19, 11.3), (29, 12.3), (43, 13.3)]:
+for x, y in [(9, 11.3), (19, 13.3), (27, 13.3), (43, 13.3)]:  # standing on the ground/hill tops
     c({"cmd": "create", "prefab": "slime", "x": x, "y": y})
 coins = [(5, 12.5), (9.2, 10.8), (13.2, 8.6), (14.2, 8.6), (19.2, 6.6), (23.2, 9.6), (28.2, 7.6), (32.2, 3.6), (33.2, 3.6), (34.2, 3.6),
-         (36.2, 3.6), (37.2, 3.6), (42.2, 7.6), (43.2, 7.6), (48.2, 10.6), (52.2, 12.5), (57.2, 8.6), (59.2, 8.6)]
+         (36.2, 3.6), (37.2, 3.6), (42.2, 7.6), (43.2, 7.6), (48.2, 10.6), (52.2, 12.5), (57.2, 9.6), (59.2, 9.6)]
 for x, y in coins:
     c({"cmd": "create", "prefab": "coin", "x": x, "y": y})
 c({"cmd": "create", "prefab": "lift", "x": 29.5, "y": 11, "props": {"x0": 29.5, "range": 4.5}})
 c({"cmd": "create", "prefab": "checkpoint", "x": 27, "y": 12})
-c({"cmd": "create", "prefab": "flag", "x": 61, "y": 8})
+c({"cmd": "create", "prefab": "flag", "x": 61, "y": 9})
 c({"cmd": "exec", "code": 'set_state("total", count("coin")); set_state("lives", 3); set_state("coins", 0); set_state("spawn", [2, 13.1]); hud("c_msg", "Arrows or WASD to move, Space to jump. Reach the flag!"); count("coin")'})
 c({"cmd": "camera", "follow": 1, "view": [24, 14], "lerp": 0.15, "tile_size": 16})
 c({"cmd": "step", "ticks": 1})
