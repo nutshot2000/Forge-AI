@@ -317,6 +317,14 @@ fn build_engine(w: &W) -> Engine {
         }
     });
 
+    reg!(e, w, "has_tag", move |id: i64, tag: &str| -> bool {
+        w.borrow().entities.get(&(id as u64)).is_some_and(|e| {
+            e.props.get("tags").and_then(Value::as_array).is_some_and(|t| t.iter().any(|v| v.as_str() == Some(tag)))
+        })
+    });
+    reg!(e, w, "has_prefab", move |name: &str| -> bool { w.borrow().prefabs.contains_key(name) });
+    reg!(e, w, "exists", move |id: i64| -> bool { w.borrow().entities.contains_key(&(id as u64)) });
+
     // --- timers & tweens ---
     for (fname, repeat, with_data) in [("after", false, false), ("after", false, true), ("every", true, false), ("every", true, true)] {
         let w = w.clone();
@@ -544,7 +552,7 @@ impl Sim {
 
         // 1. Entity scripts.
         let jobs: Vec<(u64, String)> =
-            self.world.borrow().entities.iter().filter_map(|(id, e)| e.script.clone().map(|s| (*id, s))).collect();
+            self.world.borrow().entities.iter().flat_map(|(id, e)| e.scripts().into_iter().map(move |s| (*id, s))).collect();
         for (id, script) in &jobs {
             // An earlier script this tick may have destroyed it.
             if !self.world.borrow().entities.contains_key(id) {
@@ -572,13 +580,17 @@ impl Sim {
             self.world.borrow_mut().contacts = now;
             for (a, b) in new {
                 for (me, other) in [(a, b), (b, a)] {
-                    let (script, other_map) = {
+                    let (scripts, other_map) = {
                         let w = self.world.borrow();
                         let (Some(m), Some(o)) = (w.entities.get(&me), w.entities.get(&other)) else { continue };
-                        (m.script.clone(), World::entity_json(other, o))
+                        (m.scripts(), World::entity_json(other, o))
                     };
-                    if let Some(s) = script.filter(|s| listeners.contains(s)) {
-                        self.call(&s, "on_touch", (me as i64, to_dyn(&other_map)), Some(me));
+                    for s in scripts.iter().filter(|s| listeners.contains(*s)) {
+                        // An earlier handler may have destroyed either side.
+                        let alive = { let w = self.world.borrow(); w.entities.contains_key(&me) && w.entities.contains_key(&other) };
+                        if alive {
+                            self.call(s, "on_touch", (me as i64, to_dyn(&other_map)), Some(me));
+                        }
                     }
                 }
             }
@@ -618,7 +630,7 @@ impl Sim {
                 w.entities
                     .iter()
                     .filter(|(id, _)| m.to == 0 || **id == m.to)
-                    .filter_map(|(id, e)| e.script.clone().map(|s| (*id, s)))
+                    .flat_map(|(id, e)| e.scripts().into_iter().map(move |s| (*id, s)))
                     .filter(|(_, s)| self.has_fn(s, "on_message", 3))
                     .collect()
             };
@@ -647,10 +659,14 @@ impl Sim {
         for t in due {
             match t.entity {
                 Some(id) => {
-                    let script = self.world.borrow().entities.get(&id).and_then(|e| e.script.clone());
-                    match script {
-                        Some(s) if self.has_fn(&s, "on_timer", 3) => self.call(&s, "on_timer", (id as i64, t.name.clone(), to_dyn(&t.data)), Some(id)),
-                        Some(_) => {}
+                    let scripts = self.world.borrow().entities.get(&id).map(|e| e.scripts());
+                    match scripts {
+                        Some(list) => {
+                            let listening: Vec<String> = list.into_iter().filter(|s| self.has_fn(s, "on_timer", 3)).collect();
+                            for s in listening {
+                                self.call(&s, "on_timer", (id as i64, t.name.clone(), to_dyn(&t.data)), Some(id));
+                            }
+                        }
                         // The entity is gone: its repeating timers go too.
                         None => self.world.borrow_mut().timers.retain(|x| x.entity != Some(id)),
                     }

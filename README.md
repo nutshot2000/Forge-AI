@@ -56,6 +56,20 @@ and never see a fraction.
   or set wave/freq/slide/dur/vol/arp yourself); scripts play it with `sfx("jump")`.
 - Free-movement pathfinding: `path_dir(me, x, y)` gives a direction along the shortest path; `path(...)` the whole path.
 
+## Building whole games
+
+- **Behaviour library:** `{"cmd":"behaviors"}` lists ready-made scripts: platformer_player, topdown_player, patrol,
+  chaser, shooter, projectile, health, pickup, door, key, button, moving_platform, goal, spawner.
+  `{"cmd":"use_behavior","name":"health","on":[1]}` installs one and attaches it. Entities run their `script` plus
+  every name in their `behaviors` list, so they combine (`["platformer_player", "health"]`). In the editor:
+  right-click → 🧩 Add a behavior.
+- **Timers:** `after(me, 60, "explode")`, `every(me, 30, "blink")` → `fn on_timer(me, name, data)`.
+- **Tweens:** `tween(id, "y", 5, 30, "out")` for x, y, alpha, scale, angle or any number.
+- **Messages:** `send(door, "open")`, `broadcast("alarm")` → `fn on_message(me, msg, data)`.
+- **Levels:** `goto_level("level2")` switches to a sibling world folder; `game()` / `set_game()` values (score,
+  lives, keys) carry over. Exports include every level a game can reach.
+- **Screens:** `show_screen("GAME OVER", "Score: 12", "Press R")`, `hide_screen()`.
+
 Demos: `worlds/coin-dash` (grid) and `worlds/skyward` (platformer, built by `examples/make_skyward.py`).
 
 ## As an MCP tool

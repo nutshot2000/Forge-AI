@@ -1,0 +1,68 @@
+# The behaviour library, working together in a small top-down game.
+{"cmd":"new","map":["##############","#............#","#............#","#.....#......#","#.....#......#","#............#","#............#","##############"]}
+{"cmd":"physics","preset":"topdown"}
+{"cmd":"behaviors","expect":{"behaviors":{"$len":14}}}
+{"cmd":"use_behavior","name":"shooter","expect":{"installed":["shooter","projectile"]}}
+{"cmd":"use_behavior","name":"nope","expect":{"ok":false,"error":{"$contains":"available:"}}}
+{"cmd":"batch","atomic":true,"commands":[{"cmd":"create","kind":"player","x":1,"y":1,"props":{"physics":true,"w":0.8,"h":0.8,"hp":3,"tags":["player"]}},{"cmd":"create","kind":"coin","x":3,"y":1,"props":{"w":0.6,"h":0.6}},{"cmd":"create","kind":"key","x":4,"y":1},{"cmd":"create","kind":"door","x":8,"y":1,"props":{"needs_key":true}},{"cmd":"create","kind":"button","x":2,"y":5},{"cmd":"create","kind":"door","x":10,"y":5},{"cmd":"create","kind":"turret","x":12,"y":6,"props":{"rate":20,"range":20}},{"cmd":"create","kind":"bat","x":12,"y":1,"props":{"physics":true,"w":0.7,"h":0.7,"speed":3,"sight":20}},{"cmd":"create","kind":"exit","x":12,"y":3}],"expect":{"ok":true}}
+{"cmd":"use_behavior","name":"topdown_player","on":[1],"expect":{"attached_to":[1]}}
+{"cmd":"use_behavior","name":"health","on":1}
+{"cmd":"use_behavior","name":"pickup","on":2}
+{"cmd":"use_behavior","name":"key","on":3}
+{"cmd":"use_behavior","name":"door","on":[4,6]}
+{"cmd":"use_behavior","name":"button","on":5}
+{"cmd":"set","id":5,"key":"target","value":6}
+{"cmd":"use_behavior","name":"shooter","on":7,"expect":{"installed":[],"kept_existing":["shooter","projectile"],"attached_to":[7]}}
+{"cmd":"use_behavior","name":"chaser","on":8}
+{"cmd":"use_behavior","name":"goal","on":9}
+{"cmd":"get","id":1,"expect":{"entity":{"behaviors":["topdown_player","health"]}}}
+{"cmd":"snapshot","name":"start"}
+
+# the player walks right with the keyboard (topdown_player)
+{"cmd":"step","ticks":20,"inputs":{"0":["right"]}}
+{"cmd":"exec","code":"get(1).x > 2","expect":{"result":true}}
+
+# pickups and keys add to game-wide counters
+{"cmd":"restore","name":"start"}
+{"cmd":"step","ticks":1}
+{"cmd":"exec","code":"set(1, \"x\", 3); set(1, \"y\", 1); 0"}
+{"cmd":"step","ticks":1,"expect":{"events":{"counts":{"picked":1}}}}
+{"cmd":"exec","code":"[game(\"score\"), exists(2)]","expect":{"result":[1,false]}}
+{"cmd":"exec","code":"set(1, \"x\", 4); 0"}
+{"cmd":"step","ticks":1}
+{"cmd":"exec","code":"game(\"keys\")","expect":{"result":1}}
+
+# a locked door is solid; touching it with a key opens it and uses the key up
+{"cmd":"get","id":4,"expect":{"entity":{"solid":true,"open":null}}}
+{"cmd":"exec","code":"set(1, \"x\", 8.1); 0"}
+{"cmd":"step","ticks":1,"expect":{"events":{"counts":{"door_opened":1}}}}
+{"cmd":"get","id":4,"expect":{"entity":{"solid":false,"open":true}}}
+{"cmd":"exec","code":"game(\"keys\")","expect":{"result":0}}
+
+# a button sends "open" to its target door
+{"cmd":"get","id":6,"expect":{"entity":{"solid":true}}}
+{"cmd":"exec","code":"set(1, \"x\", 2.1); set(1, \"y\", 5.1); 0"}
+{"cmd":"step","ticks":1,"expect":{"events":{"counts":{"button_pressed":1,"door_opened":1}}}}
+{"cmd":"get","id":6,"expect":{"entity":{"open":true,"solid":false}}}
+
+# the chaser closes in on the player
+{"cmd":"exec","code":"let d0 = dist(8, 1); d0","expect":{"result":"*"}}
+{"cmd":"step","ticks":30}
+{"cmd":"exec","code":"dist(8, 1) < d0","expect":{"result":true}}
+
+# the turret shoots; projectiles damage the player through the health behaviour
+{"cmd":"restore","name":"start"}
+{"cmd":"exec","code":"destroy(8); set(1, \"x\", 9); set(1, \"y\", 6.1); 0"}
+{"cmd":"step","ticks":60,"expect":{"events":{"counts":{"shot":"*","damaged":"*"}}}}
+{"cmd":"exec","code":"get(1).hp < 3","expect":{"result":true}}
+
+# the goal shows a win screen
+{"cmd":"restore","name":"start"}
+{"cmd":"exec","code":"destroy(7); destroy(8); set(1, \"x\", 12.1); set(1, \"y\", 3.1); 0"}
+{"cmd":"step","ticks":1,"expect":{"screen":{"title":"YOU WIN!"}}}
+
+# enough damage and it's game over
+{"cmd":"restore","name":"start"}
+{"cmd":"exec","code":"send(1, \"damage\", #{ amount: 5 }); 0"}
+{"cmd":"step","ticks":1,"expect":{"screen":{"title":"GAME OVER"},"events":{"counts":{"died":1}}}}
+{"cmd":"events","kinds":["script_error"],"expect":{"counts":{"script_error":null}}}

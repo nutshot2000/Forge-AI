@@ -110,6 +110,10 @@ pub const COMMANDS: &[Cmd] = &[
         opt("arp", "array", "semitone steps, e.g. [0, 4, 7]"), opt("arp_speed", "number", "seconds per step"), opt("delete", "bool", "remove it")] },
     Cmd { name: "goto", group: "files", desc: "Switch to another level (a world folder next to this one), like goto_level() in a script. Game-wide values (game()/set_game()) carry over.", args: &[
         req("level", "string", "level (world folder) name"), opt("keep_game", "bool", "carry game-wide values over (default true)")] },
+    Cmd { name: "behaviors", group: "code", desc: "The behaviour library: ready-made scripts (platformer_player, topdown_player, patrol, chaser, shooter, projectile, health, pickup, door, key, button, moving_platform, goal, spawner) with what they do and the props they read.", args: &[] },
+    Cmd { name: "use_behavior", group: "code", desc: "Install a behaviour (and what it requires) into this world as a script, optionally attaching it to entities (their behaviors list; several run together).", args: &[
+        req("name", "string", "behaviour name"), opt("on", "any", "entity id or [ids] to attach it to"),
+        opt("overwrite", "bool", "replace a script of the same name you've edited (default: keep yours)")] },
     Cmd { name: "export_game", group: "files", desc: "Export the game as one self-contained .html file anyone can play in a browser.", args: &[
         opt("title", "string", "game title (default: the world's name)")] },
     Cmd { name: "undo", group: "run", desc: "Undo the last change (the user's or yours).", args: &[] },
@@ -264,6 +268,7 @@ pub const SCRIPT_API: &str = r#"{
   "messages": "send(id, msg[, data]) and broadcast(msg[, data]) -> fn on_message(me, msg, data) in the receiver's script, delivered the same tick",
   "levels": "goto_level(name) switches to another world folder at the end of the tick (level() = current name). game(name[,default]) / set_game(name,val) are game-wide values that carry across levels (score, lives, keys)",
   "screens": "show_screen(title[, text[, prompt]]) shows a full-screen overlay (title/pause/game over), hide_screen(), screen_shown()",
+  "behaviors": "an entity runs its script plus every script named in its behaviors prop (e.g. [\"platformer_player\", \"health\"]); the behaviour library (behaviors / use_behavior commands) has ready-made ones. has_tag(id, tag) has_prefab(name) exists(id)",
   "hooks": "entity scripts define fn tick(me) and optionally fn on_touch(me, other) (called once when two entities start overlapping; other is a map). A script named 'rules' may define fn rules(). Order each tick: tick scripts -> physics -> on_touch -> rules -> camera",
   "units": "positions are the top-left of the entity box, in tiles (1.0 = one tile); grid games use whole numbers",
   "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'; 'tags' is an array prop"

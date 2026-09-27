@@ -1174,12 +1174,26 @@ function entityMenu(ev, id) {
     { label: '📋 Copy', run: () => { clipboard = template(e); navigator.clipboard?.writeText(JSON.stringify(e, null, 2)).catch(() => {}); } },
     { label: '★ Make prefab…', run: async () => { const n = await ask('Prefab name', 'Reusable template: place copies from the ✚ Place list.', e.kind); if (n) cmd({ cmd: 'prefab', name: n, props: template(e) }); } },
     { label: '📜 Edit its script', run: () => { if (e.script && es.scripts[e.script] !== undefined) openScript(e.script); else newScriptFor(e); } },
+    { label: '🧩 Add a behavior…', run: () => behaviorMenu(ev, e) },
     { label: '⬆ Bring to front', run: () => cmd({ cmd: 'set', id: e.id, key: 'z', value: Math.max(0, ...es.entities.map(x => x.z || 0)) + 1 }) },
     { label: 'ⓘ Copy all metadata (JSON)', run: () => navigator.clipboard?.writeText(JSON.stringify(e, null, 2)) },
     { label: '⤓ Export as .json', run: () => download(`${e.kind}-${e.id}.json`, JSON.stringify(e, null, 2)) },
     '-',
     { label: '🗑 Delete', cls: 'danger', run: () => cmd({ cmd: 'destroy', id: e.id }) },
   ]);
+}
+let behaviorList = null;
+async function behaviorMenu(ev, e) {
+  if (!behaviorList) { const r = await cmd({ cmd: 'behaviors' }); behaviorList = r.ok ? r.behaviors : []; }
+  const have = new Set([e.script, ...(e.behaviors || [])]);
+  menu(ev.clientX, ev.clientY, `Add a behavior to #${e.id} ${e.kind}`, behaviorList.map(b => ({
+    label: `${have.has(b.name) ? '✓' : '🧩'} ${b.name.replace(/_/g, ' ')} — ${b.about.split('. ')[0].slice(0, 70)}`,
+    run: async () => {
+      const r = await cmd({ cmd: 'use_behavior', name: b.name, on: [e.id] });
+      if (!r.ok) return toast(r.error, 'you');
+      toast(`Added ${b.name.replace(/_/g, ' ')} to #${e.id}` + (b.props ? ` · settings: ${b.props}` : ''), 'you');
+    },
+  })));
 }
 function cellMenu(ev, p) {
   const tile = (maps[cur.map] || [])[p.y]?.[p.x] ?? ' ';

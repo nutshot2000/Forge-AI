@@ -89,15 +89,15 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 
 ## Phase 4: Structure for full games
 
-- ☐ **P4.1 Scenes and levels:** multiple maps per project, `goto("level2")`, doors/portals, level list and ordering in the editor.
-- ☐ **P4.2 Game flow:** title screen, pause menu, game over, win screen, credits, built from simple text UI definitions.
+- ☑ **P4.1 Scenes and levels:** multiple maps per project, `goto("level2")`, doors/portals, level list and ordering in the editor.
+- ◐ **P4.2 Game flow:** title screen, pause menu, game over, win screen, credits, built from simple text UI definitions. (Done: show_screen overlays, levels via goto_level. To do: menus with choices.)
 - ☐ **P4.3 UI system:** buttons, bars, text boxes, inventory grids, defined in text, laid out automatically, clickable in-game.
 - ☐ **P4.4 Dialogue:** conversation trees with choices and conditions, in a readable text format.
-- ☐ **P4.5 Game state and saves:** variables that persist across levels; save/load slots.
-- ☐ **P4.6 Timers, tweens and coroutines:** `after(30, || ...)`, `every(60, ...)`, smooth movement tweens, wait-until.
-- ☐ **P4.7 Messages between entities:** `send(target, "open")` with `fn on_message(me, msg)`; global events.
+- ◐ **P4.5 Game state and saves:** variables that persist across levels; save/load slots. (Done: game()/set_game() values that carry across levels. To do: save slots.)
+- ☑ **P4.6 Timers, tweens and coroutines:** `after(30, || ...)`, `every(60, ...)`, smooth movement tweens, wait-until.
+- ☑ **P4.7 Messages between entities:** `send(target, "open")` with `fn on_message(me, msg)`; global events.
 - ☐ **P4.8 State machines:** `idle → chase → attack` states declared in data, visualised in the editor.
-- ☐ **P4.9 Behaviour library:** ready-made scripts (platformer player, top-down player, patrol, chase, shooter, spawner, pickup, door+key, health) that can be mixed.
+- ☑ **P4.9 Behaviour library:** ready-made scripts (platformer player, top-down player, patrol, chase, shooter, spawner, pickup, door+key, health) that can be mixed.
 - ☐ **P4.10 Spawners and waves:** timed/random spawning with difficulty ramps.
 - ☐ **Milestone:** a complete small game with a title screen, 3 levels, dialogue, saving and music.
 

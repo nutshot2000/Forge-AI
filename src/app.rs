@@ -188,6 +188,7 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "camera" => format!("camera {}", clip(&c.to_string())),
         "background" => "change background".into(),
         "goto" => format!("go to level '{}'", s("level")),
+        "use_behavior" => format!("🧩 add behavior '{}'{}", s("name"), if has("on") { format!(" to {}", c["on"]) } else { String::new() }),
         "sound" if c.as_object().is_some_and(|m| m.len() > 2) => format!("sound '{}'", s("name")),
         "export_game" => "export playable game".into(),
         "create_world" => format!("create world '{}'", s("name")),
@@ -283,6 +284,43 @@ fn remember_last_world(p: &std::path::Path) {
     }
 }
 
+/// The behaviour library: ready-made scripts, installed into a world with `use_behavior`.
+pub const BEHAVIORS: &[(&str, &str)] = &[
+    ("platformer_player", include_str!("behaviors/platformer_player.rhai")),
+    ("topdown_player", include_str!("behaviors/topdown_player.rhai")),
+    ("patrol", include_str!("behaviors/patrol.rhai")),
+    ("chaser", include_str!("behaviors/chaser.rhai")),
+    ("shooter", include_str!("behaviors/shooter.rhai")),
+    ("projectile", include_str!("behaviors/projectile.rhai")),
+    ("health", include_str!("behaviors/health.rhai")),
+    ("pickup", include_str!("behaviors/pickup.rhai")),
+    ("door", include_str!("behaviors/door.rhai")),
+    ("key", include_str!("behaviors/key.rhai")),
+    ("button", include_str!("behaviors/button.rhai")),
+    ("moving_platform", include_str!("behaviors/moving_platform.rhai")),
+    ("goal", include_str!("behaviors/goal.rhai")),
+    ("spawner", include_str!("behaviors/spawner.rhai")),
+];
+
+/// A behaviour's header comments: what it does, its props, and what it needs.
+fn behavior_info(name: &str, src: &str) -> Value {
+    let mut about = vec![];
+    let (mut props, mut requires) = (String::new(), vec![]);
+    for line in src.lines().take_while(|l| l.starts_with("//")) {
+        let l = line.trim_start_matches('/').trim();
+        if l.starts_with("Behavior:") {
+            continue;
+        } else if let Some(p) = l.strip_prefix("Props:") {
+            props = p.trim().to_string();
+        } else if let Some(r) = l.strip_prefix("Requires:") {
+            requires = r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        } else if !l.is_empty() {
+            about.push(l.to_string());
+        }
+    }
+    json!({ "name": name, "about": about.join(" "), "props": props, "requires": requires })
+}
+
 pub const SOUND_PRESETS: &[&str] = &["jump", "coin", "hit", "explosion", "powerup", "laser", "blip", "stomp", "win"];
 
 /// Ready-made sound recipes, a starting point to tweak.
@@ -325,7 +363,7 @@ fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
         "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
-        | "create_world" | "physics" | "camera" | "background" | "goto" => true,
+        | "create_world" | "physics" | "camera" | "background" | "goto" | "use_behavior" => true,
         "sound" => has("preset") || c.as_object().is_some_and(|m| m.len() > 2) || has("delete"),
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
@@ -1212,6 +1250,59 @@ impl App {
                 self.sim.level_changed = Some(name.to_string());
                 self.after_ticks();
                 Ok(self.state())
+            }
+            "behaviors" => {
+                let list: Vec<Value> = BEHAVIORS.iter().map(|(n, src)| behavior_info(n, src)).collect();
+                Ok(json!({
+                    "behaviors": list,
+                    "how": "use_behavior installs one (and what it requires) as a script; attach it with the entity prop behaviors: [names] (several can run together) or as its script",
+                }))
+            }
+            "use_behavior" => {
+                let name = need_str(c, "name")?;
+                let overwrite = c.get("overwrite") == Some(&json!(true));
+                // The behaviour plus everything it requires.
+                let mut todo = vec![name.to_string()];
+                let mut order = vec![];
+                while let Some(n) = todo.pop() {
+                    if order.contains(&n) {
+                        continue;
+                    }
+                    let (_, src) = BEHAVIORS.iter().find(|(b, _)| *b == n).ok_or_else(|| {
+                        format!("no behavior '{n}' (available: {})", BEHAVIORS.iter().map(|(b, _)| *b).collect::<Vec<_>>().join(", "))
+                    })?;
+                    todo.extend(behavior_info(&n, src)["requires"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from));
+                    order.push(n);
+                }
+                let (mut installed, mut kept) = (vec![], vec![]);
+                for n in &order {
+                    let src = BEHAVIORS.iter().find(|(b, _)| b == n).unwrap().1;
+                    if !overwrite && self.sim.world.borrow().scripts.contains_key(n.as_str()) {
+                        kept.push(n.clone());
+                        continue;
+                    }
+                    self.sim.set_script(n, src).map_err(|e| format!("behavior '{n}' failed to compile: {e}"))?;
+                    installed.push(n.clone());
+                }
+                let mut attached = vec![];
+                let ids: Vec<u64> = match c.get("on") {
+                    Some(Value::Array(a)) => a.iter().filter_map(Value::as_u64).collect(),
+                    Some(v) => v.as_u64().into_iter().collect(),
+                    None => vec![],
+                };
+                {
+                    let mut w = self.sim.world.borrow_mut();
+                    for id in ids {
+                        let e = w.entities.get_mut(&id).ok_or(format!("no entity {id}"))?;
+                        let mut list: Vec<Value> = e.props.get("behaviors").and_then(Value::as_array).cloned().unwrap_or_default();
+                        if !list.iter().any(|v| v == name) {
+                            list.push(json!(name));
+                        }
+                        e.props.insert("behaviors".into(), json!(list));
+                        attached.push(id);
+                    }
+                }
+                Ok(json!({ "installed": installed, "kept_existing": kept, "attached_to": attached }))
             }
             "export_game" => {
                 let title = arg_str(c, "title")

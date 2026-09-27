@@ -56,6 +56,17 @@ impl Entity {
             .unwrap_or('?')
     }
 
+    /// Every script this entity runs: its `script`, then each name in its `behaviors` list.
+    pub fn scripts(&self) -> Vec<String> {
+        let mut out: Vec<String> = self.script.iter().cloned().collect();
+        for b in self.props.get("behaviors").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+            if !out.iter().any(|s| s == b) {
+                out.push(b.to_string());
+            }
+        }
+        out
+    }
+
     pub fn f(&self, key: &str, default: f64) -> f64 {
         self.props.get(key).and_then(Value::as_f64).unwrap_or(default)
     }
