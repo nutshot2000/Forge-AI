@@ -4,7 +4,7 @@
 game: anything you can see or click, the agent can see and do in one command; each of you always knows what the
 other changed; and anything either of you does can be undone.
 
-☑ = done, ◐ = partly done. Items have IDs (e.g. `P1.4`) so we can refer to them ("let's do P1.4 next"). ☐ = to do, ☑ = done.
+☑ = done, ◐ = partly done, ✗ = dropped. Items have IDs (e.g. `P1.4`) so we can refer to them ("let's do P1.4 next"). ☐ = to do, ☑ = done.
 
 ---
 
@@ -121,7 +121,7 @@ The part that makes forge different from other engines.
 - ☐ **P6.3 Watch mode:** the agent can subscribe to events ("tell me when the player dies") and get a summary of what happened since last time.
 
 **Acting**
-- ☐ **P6.4 In-editor agent:** requests and a chat panel go straight to Claude running in the background (headless Claude Code with the forge tool), so you never switch windows; replies and changes appear live.
+- ✗ **P6.4 In-editor agent:** dropped. You drive Forge from your own agent (Claude Code, Cursor, …) through MCP, which works better in practice than a chat box inside the app.
 - ☐ **P6.5 Agent checkpoints:** the agent auto-snapshots before any big change; "⟲ undo everything the agent did in that request" in one click.
 - ☐ **P6.6 Suggestion cards:** the agent can propose changes as cards (preview diff + Apply/Dismiss) instead of applying them directly, when you want to stay in control.
 - ☐ **P6.7 Parallel agents:** several agents work on copies (one does art, one levels, one balancing) and merge back with a visual diff.
@@ -170,7 +170,7 @@ The part that makes forge different from other engines.
 
 1. **Phase 0** (P0.1–P0.3 first: git, autosave, tests)
 2. **Phase 1 + P2.1–P2.3** together: real 2D + smooth play + export, then the platformer milestone
-3. **P6.1, P6.4, P6.9, P6.11**: agent screenshots, in-editor agent, level checks, game health
+3. **Phase 4 core** (timers, messages, levels, game screens, behaviour library), then **P6.1, P6.9, P6.11**: agent screenshots, level checks, game health
 4. **Phase 3**: animation, sound, pixel editor
 5. **Phase 4**: levels, menus, dialogue, then the "complete game" milestone
 6. Then Phases 5, 6 (the rest), 7 and 8, interleaved based on what the games we make need

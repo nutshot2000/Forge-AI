@@ -40,22 +40,30 @@ fn exe_build(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// If the engine on `port` was started by this app from an older build, ask it to quit.
-/// Engines an agent is driving are left alone.
-fn retire_stale_engine(port: u16, installed: &Path) {
-    let Some(state) = engine_cmd(port, r#"{"cmd":"state"}"#) else { return };
-    let build = state["build"].as_str().unwrap_or("");
-    let managed = state["managed"].as_bool().unwrap_or(false);
-    if !managed || build == exe_build(installed) {
-        return;
-    }
-    let _ = engine_cmd(port, r#"{"cmd":"quit"}"#);
-    for _ in 0..50 {
+/// Finds an engine this app started earlier (and is current) to reopen a window onto.
+/// Engines an AI agent is running are never reused or touched; ones from an older build
+/// are asked to quit so the new version starts.
+fn find_own_engine(installed: &Path) -> Option<u16> {
+    for port in PORT..PORT + 10 {
         if !forge_running(port) {
-            return;
+            continue;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        let Some(state) = engine_cmd(port, r#"{"cmd":"state"}"#) else { continue };
+        if !state["managed"].as_bool().unwrap_or(false) {
+            continue; // an agent's engine: leave it alone
+        }
+        if state["build"].as_str().unwrap_or("") == exe_build(installed) {
+            return Some(port);
+        }
+        let _ = engine_cmd(port, r#"{"cmd":"quit"}"#);
+        for _ in 0..50 {
+            if !forge_running(port) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
+    None
 }
 
 /// The forge project folder: the nearest ancestor of this exe that has worlds/.
@@ -98,12 +106,10 @@ fn main() {
             ["coin-dash", "dungeon"].iter().map(|w| worlds.join(w)).find(|p| p.join("world.json").exists())
         });
 
-    let mut url = format!("http://127.0.0.1:{PORT}");
+    let own = find_own_engine(&engine_exe);
+    let mut url = format!("http://127.0.0.1:{}", own.unwrap_or(PORT));
     let mut engine = None;
-    if forge_running(PORT) {
-        retire_stale_engine(PORT, &engine_exe);
-    }
-    if !forge_running(PORT) {
+    if own.is_none() {
         let mut cmd = Command::new(&engine_exe);
         if let Some(w) = &world {
             cmd.arg(w);
