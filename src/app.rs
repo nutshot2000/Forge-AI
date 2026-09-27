@@ -58,6 +58,13 @@ pub struct App {
     pub managed: bool,
     /// Set by `quit`; the main loop exits after replying.
     pub quit: bool,
+    /// The world has changes that aren't saved to its folder yet.
+    dirty: bool,
+    /// Changes since the last autosave.
+    autosave_pending: bool,
+    last_autosave: Instant,
+    /// Unsaved work found from an earlier session, offered to the user.
+    recovery: Option<Value>,
     pub ui: Ui,
     undo: Vec<(World, String)>,
     redo: Vec<(World, String)>,
@@ -142,6 +149,8 @@ pub const HELP: &str = r#"{
     "new": {"map": "opt array of tile rows", "width": "or: walled empty room, default 20", "height": "default 10", "seed": "rng seed", "path": "opt folder for later saves"},
     "load": {"path": "world folder (world.json + scripts/*.rhai)"},
     "save": {"path": "optional; defaults to the loaded folder"},
+    "recover": {"_": "load the unsaved work found from an earlier session (see 'recovery' in look)"},
+    "discard_recovery": {"_": "throw that unsaved work away"},
     "state": {"_": "tick, size, counts by kind, scripts, vars, snapshots, compile errors"},
     "get": {"id": "entity id"},
     "query": {"kind": "opt", "near": "opt [x,y,r]", "where": "opt Rhai expr over e, e.g. e.hp < 5", "limit": "default 50"},
@@ -222,6 +231,7 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "request" => format!("📝 request: {}", s("text")),
         "resolve" => format!("✓ resolved request #{}: {}", c["rid"], s("reply")),
         "import" => "import world".into(),
+        "recover" => "restore unsaved work".into(),
         "set_map" => "replace map".into(),
         "redo" => "redo".into(),
         "say" => format!("💬 {}", s("text")),
@@ -232,11 +242,23 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
     })
 }
 
+/// Unsaved work from an earlier session: an autosave newer than the world's own files.
+fn find_recovery(world_dir: &std::path::Path) -> Option<Value> {
+    let dir = world_dir.join(".autosave");
+    let meta: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("autosave.json")).ok()?).ok()?;
+    let saved = std::fs::metadata(world_dir.join("world.json")).and_then(|m| m.modified()).ok()?;
+    let auto = std::fs::metadata(dir.join("world.json")).and_then(|m| m.modified()).ok()?;
+    if auto <= saved {
+        return None;
+    }
+    Some(json!({ "dir": dir.display().to_string(), "time": meta["time"], "tick": meta["tick"] }))
+}
+
 /// Commands that change the world, and so get an undo entry first.
 fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
-        "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" => true,
+        "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover" => true,
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
         "prefab" => has("props") || has("delete"),
@@ -256,6 +278,10 @@ impl App {
             build: String::new(),
             managed: false,
             quit: false,
+            dirty: false,
+            autosave_pending: false,
+            last_autosave: Instant::now(),
+            recovery: None,
             ui: Ui::default(),
             undo: vec![],
             redo: vec![],
@@ -275,10 +301,57 @@ impl App {
         let p = PathBuf::from(path);
         let w = World::load_dir(&p)?;
         self.sim.replace_world(w);
+        self.dirty = false;
+        self.autosave_pending = false;
+        self.recovery = find_recovery(&p);
         self.path = Some(p);
         // The agent's first look reports changes relative to the world as loaded.
         self.last_look = Some(self.sim.world.borrow().clone());
         Ok(self.state())
+    }
+
+    /// Where this world's autosave goes: `<world>/.autosave`, or a per-user folder for unsaved worlds.
+    fn autosave_dir(&self) -> PathBuf {
+        match &self.path {
+            Some(p) => p.join(".autosave"),
+            None => PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default()).join("forge").join("autosave").join("untitled"),
+        }
+    }
+
+    /// Marks the world as changed (edits, or ticks while playing).
+    pub fn touch(&mut self) {
+        self.dirty = true;
+        self.autosave_pending = true;
+    }
+
+    fn write_autosave(&mut self) -> Result<(), String> {
+        let dir = self.autosave_dir();
+        let w = self.sim.world.borrow();
+        w.save_dir(&dir)?;
+        let meta = json!({
+            "time": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            "tick": w.tick,
+            "world": self.path.as_ref().map(|p| p.display().to_string()),
+        });
+        std::fs::write(dir.join("autosave.json"), meta.to_string()).map_err(|e| e.to_string())?;
+        drop(w);
+        self.autosave_pending = false;
+        self.last_autosave = Instant::now();
+        Ok(())
+    }
+
+    /// Called by the main loop: autosaves at most once a minute while there are changes.
+    pub fn autosave_tick(&mut self) {
+        if self.autosave_pending && self.last_autosave.elapsed().as_secs() >= 60 {
+            let _ = self.write_autosave();
+        }
+    }
+
+    /// Called when the engine exits, so closing without saving never loses work.
+    pub fn autosave_now(&mut self) {
+        if self.autosave_pending {
+            let _ = self.write_autosave();
+        }
     }
 
     /// Seconds since the editor last polled, or None if it never has.
@@ -334,6 +407,8 @@ impl App {
             "keys_down": w.input.down,
             "ui": self.ui,
             "build": self.build,
+            "unsaved": self.dirty,
+            "recovery": self.recovery,
             "notices": self.notices,
             "requests": self.requests,
             "undo": self.undo.len(),
@@ -434,6 +509,8 @@ impl App {
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
+            "unsaved": self.dirty,
+            "recovery": self.recovery,
         })
     }
 
@@ -835,6 +912,21 @@ impl App {
 
             // --- world files, scripts, experiments ---
             "load" => self.load(need_str(c, "path")?),
+            "recover" => {
+                let dir = self.recovery.as_ref().and_then(|r| r["dir"].as_str()).map(PathBuf::from).ok_or("no unsaved work to recover")?;
+                let w = World::load_dir(&dir)?;
+                self.sim.replace_world(w);
+                self.recovery = None;
+                self.touch();
+                Ok(json!({ "recovered": dir.display().to_string(), "tick": self.sim.world.borrow().tick }))
+            }
+            "discard_recovery" => {
+                let r = self.recovery.take().ok_or("no unsaved work to discard")?;
+                if let Some(d) = r["dir"].as_str() {
+                    let _ = std::fs::remove_dir_all(d);
+                }
+                Ok(json!({ "discarded": r }))
+            }
             "new" => {
                 let map: Vec<String> = match c.get("map").and_then(Value::as_array) {
                     Some(rows) => rows.iter().filter_map(Value::as_str).map(String::from).collect(),
@@ -857,6 +949,10 @@ impl App {
                 let p = arg_str(c, "path").map(PathBuf::from).or(self.path.clone()).ok_or("no path: give 'path'")?;
                 self.sim.world.borrow().save_dir(&p)?;
                 self.path = Some(p.clone());
+                self.dirty = false;
+                self.autosave_pending = false;
+                self.recovery = None;
+                let _ = std::fs::remove_dir_all(p.join(".autosave"));
                 Ok(json!({ "saved": p.display().to_string() }))
             }
             "script" => match (arg_str(c, "name"), arg_str(c, "code")) {
@@ -944,7 +1040,10 @@ impl App {
         }
         let result = self.handle(c, source);
         match &result {
-            Ok(_) if undoable => self.redo.clear(),
+            Ok(_) if undoable => {
+                self.redo.clear();
+                self.touch();
+            }
             Err(_) if undoable => {
                 self.undo.pop();
             }

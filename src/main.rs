@@ -96,6 +96,9 @@ fn main() {
         } else {
             Duration::from_secs(3600)
         };
+        // Wake up now and then to autosave.
+        wait = wait.min(Duration::from_secs(5));
+        app.autosave_tick();
         if exit_when_closed {
             wait = wait.min(Duration::from_secs(1));
             let gone = match app.editor_idle_secs() {
@@ -145,10 +148,12 @@ fn main() {
             next_tick = Instant::now();
         } else if Instant::now() >= next_tick {
             app.sim.run_tick();
+            app.touch();
             next_tick += Duration::from_secs_f64(1.0 / app.tps);
             if next_tick < Instant::now() {
                 next_tick = Instant::now(); // fell behind: don't try to catch up in a burst
             }
         }
     }
+    app.autosave_now();
 }

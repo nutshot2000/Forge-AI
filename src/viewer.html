@@ -55,6 +55,7 @@
   .tools > * { pointer-events: auto; }
   .tools .box { display: flex; gap: 4px; align-items: center; background: #151821e6; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
   .tools button, .tools select { padding: 3px 9px; font-size: 12px; }
+  .recover { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; align-items: center; gap: 10px; background: #2a2412f2; color: #ffe2a8; border: 1px solid var(--warn); border-radius: 10px; padding: 6px 8px 6px 14px; font-size: 13px; box-shadow: 0 8px 30px #0008; white-space: nowrap; }
   .banner { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: #0f2a1ee6; color: var(--you); border: 1px solid var(--you); border-radius: 99px; padding: 3px 14px; font-size: 12px; display: none; }
   .replay { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; background: #151821ee; border: 1px solid var(--warn); color: var(--warn); border-radius: 99px; padding: 4px 6px 4px 14px; font-size: 12px; }
   .hint { position: absolute; bottom: 10px; right: 12px; color: #4b5266; font-size: 11px; }
@@ -194,6 +195,7 @@
         <button data-tool="erase" title="Delete entity (E)">✖ Erase</button>
       </div>
     </div>
+    <div class="recover" id="recover"><span id="rectext"></span><button id="recyes">Restore</button><button id="recno">Discard</button></div>
     <div class="banner" id="banner">🎮 keyboard controls the game · Esc to stop</div>
     <div class="replay" id="replay"><span id="behind"></span><button id="live">Jump to live</button></div>
     <div id="toasts"></div>
@@ -971,6 +973,8 @@ $('save').onclick = async () => {
   $('save').textContent = r.ok ? '✓ Saved' : '✗ ' + r.error;
   setTimeout(() => $('save').textContent = '💾 Save', 1800);
 };
+$('recyes').onclick = () => cmd({ cmd: 'recover' });
+$('recno').onclick = () => { if (confirm('Throw away the unsaved work? This cannot be undone.')) cmd({ cmd: 'discard_recovery' }); };
 $('live').onclick = () => { if (queue.length) { show(queue[queue.length - 1], true); queue = []; } };
 
 function showTab(name, push = true) {
@@ -1246,6 +1250,14 @@ function renderAll() {
   $('play').classList.toggle('on', es.playing);
   if (es.playing) $('tps').value = String(es.tps);
   $('undo').disabled = !es.undo; $('redo').disabled = !es.redo;
+  if (!$('save').textContent.startsWith('✓') && !$('save').textContent.startsWith('✗'))
+    $('save').textContent = es.unsaved ? '💾 Save ●' : '💾 Save';
+  $('save').title = es.unsaved ? 'You have unsaved changes (they are autosaved every minute)' : 'Everything is saved';
+  if (es.recovery) {
+    const when = new Date(es.recovery.time * 1000);
+    $('rectext').textContent = `Found unsaved work from ${when.toLocaleString()} (tick ${es.recovery.tick}). Restore it?`;
+    $('recover').style.display = 'flex';
+  } else $('recover').style.display = 'none';
   $('undo').title = `Undo (Ctrl+Z) · ${es.undo} step(s)`; $('redo').title = `Redo (Ctrl+Y) · ${es.redo} step(s)`;
   const snaps = es.snapshots.join('|');
   if ($('restore').dataset.k !== snaps) {
