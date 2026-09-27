@@ -1,0 +1,19 @@
+# The user/agent loop: requests, change tracking in look, shared UI, say/point.
+{"cmd":"new","width":8,"height":6}
+{"cmd":"create","kind":"door","x":3,"y":3}
+{"cmd":"look","expect":{"open_requests":{"$len":0}}}
+{"cmd":"request","id":1,"text":"make this open with a key","expect":{"request":{"rid":1,"status":"open","entity":{"kind":"door"}}}}
+{"cmd":"request","x":5,"y":2,"text":"add a torch here","expect":{"request":{"rid":2,"x":5,"y":2}}}
+{"cmd":"set","id":1,"key":"locked","value":true}
+{"cmd":"look","expect":{"open_requests":{"$len":2},"changes":{"by_user_since_last_look":{"$len":3},"world_diff_since_last_look":{"changed":{"1":{"locked":[null,true]}}}}}}
+{"cmd":"look","expect":{"changes":{"by_user_since_last_look":{"$len":0}}}}
+{"cmd":"resolve","rid":1,"reply":"added a key","expect":{"request":{"status":"done","reply":"added a key"}}}
+{"cmd":"requests","expect":{"requests":{"$len":1}}}
+{"cmd":"requests","all":true,"expect":{"requests":{"$len":2}}}
+{"cmd":"ui","selected":1,"tool":"paint","expect":{"ui":{"selected":1,"tool":"paint","by":"cli"}}}
+{"cmd":"ui","tool":"hammer","expect":{"ok":false,"error":{"$contains":"unknown tool"}}}
+{"cmd":"ui","cell":[2,2],"expect":{"ui":{"cell":[2,2],"selected":null}}}
+{"cmd":"look","expect":{"user":{"selected_cell":{"x":2,"y":2,"tile":"."}}}}
+{"cmd":"say","text":"hello","expect":{"said":"hello"}}
+{"cmd":"point","id":1,"label":"here","expect":{"pointed":[3,3]}}
+{"cmd":"editor_state","expect":{"notices":{"$len":2}}}

@@ -1,0 +1,18 @@
+# Painting, resizing, replacing the map, save/load, export/import.
+{"cmd":"new","width":5,"height":4}
+{"cmd":"paint","tile":"#","rect":[1,1,2,2],"expect":{"painted":4}}
+{"cmd":"view","expect":{"rows":["#####","###.#","###.#","#####"]}}
+{"cmd":"resize","width":7,"height":5,"fill":",","expect":{"size":[7,5]}}
+{"cmd":"view","expect":{"rows":["#####,,","###.#,,","###.#,,","#####,,",",,,,,,,"]}}
+{"cmd":"set_map","rows":["#####","#...#","#####"],"expect":{"size":[5,3]}}
+{"cmd":"create","kind":"gem","x":2,"y":1,"props":{"value":10}}
+{"cmd":"script","name":"spin","code":"fn tick(me) { }"}
+{"cmd":"sprite","name":"g","palette":{"a":"red"},"pixels":["a"]}
+{"cmd":"export","expect":{"world":{"format":"forge-world-1","map":{"$len":3},"scripts":{"spin":"*"},"sprites":{"g":"*"}}}}
+{"cmd":"save","path":"$TMP/w","expect":{"ok":true}}
+{"cmd":"new"}
+{"cmd":"load","path":"$TMP/w","expect":{"entities":1,"scripts":["spin"]}}
+{"cmd":"get","id":1,"expect":{"entity":{"kind":"gem","value":10}}}
+{"cmd":"import","world":{"map":["###","#.#","###"],"entities":{"5":{"kind":"x","x":1,"y":1}},"scripts":{"s":"fn tick(me) {}"}},"expect":{"entities":1,"scripts":["s"],"size":[3,3]}}
+{"cmd":"create","kind":"y","x":1,"y":1,"expect":{"id":6}}
+{"cmd":"import","world":{"nope":1},"expect":{"ok":false,"error":{"$contains":"not a forge world"}}}

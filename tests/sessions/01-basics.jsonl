@@ -1,0 +1,23 @@
+# Creating, editing, deleting entities, with undo/redo and error messages.
+{"cmd":"new","width":10,"height":6,"expect":{"ok":true,"size":[10,6],"entities":0}}
+{"cmd":"create","kind":"box","x":2,"y":2,"props":{"hp":3},"expect":{"ok":true,"id":1,"entity":{"kind":"box","x":2,"y":2,"hp":3}}}
+{"cmd":"get","id":1,"expect":{"entity":{"id":1,"hp":3}}}
+{"cmd":"set","id":1,"key":"hp","value":5,"expect":{"ok":true,"entity":{"hp":5}}}
+{"cmd":"set","id":1,"key":"x","value":"left","expect":{"ok":false,"error":{"$contains":"integer"}}}
+{"cmd":"set","id":1,"key":"hp","value":null,"expect":{"ok":true}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
+{"cmd":"undo","expect":{"ok":true}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":5}}}
+{"cmd":"redo","expect":{"ok":true}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
+{"cmd":"destroy","id":1,"expect":{"ok":true,"destroyed":1}}
+{"cmd":"get","id":1,"expect":{"ok":false,"error":{"$contains":"no entity 1"}}}
+{"cmd":"destroy","id":1,"expect":{"ok":false}}
+{"cmd":"undo","expect":{"ok":true}}
+{"cmd":"get","id":1,"expect":{"ok":true}}
+{"cmd":"nope","expect":{"ok":false,"error":{"$contains":"unknown cmd"}}}
+{"cmd":"create","kind":"box","x":1,"y":1,"expect":{"id":2}}
+{"cmd":"query","kind":"box","expect":{"total":2}}
+{"cmd":"query","where":"e.x > 1","expect":{"total":1,"results":[{"id":1}]}}
+{"cmd":"view","expect":{"rows":{"$len":6}}}
+{"cmd":"state","expect":{"entities":2,"kinds":{"box":2}}}

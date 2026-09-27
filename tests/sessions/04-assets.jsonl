@@ -1,0 +1,17 @@
+# Sprites, tile types, prefabs, tags and the HUD.
+{"cmd":"new","width":6,"height":4}
+{"cmd":"sprite","name":"s","palette":{"a":"#fff"},"pixels":["ab"],"expect":{"ok":false,"error":{"$contains":"palette has no color"}}}
+{"cmd":"sprite","name":"s","palette":{"a":"#fff","b":"#000"},"pixels":["ab.","ba."],"expect":{"ok":true,"size":[3,2]}}
+{"cmd":"sprite","expect":{"sprites":["s"]}}
+{"cmd":"tile","char":"~","name":"water","solid":true,"color":"#00f","expect":{"ok":true,"tile":{"solid":true,"name":"water"}}}
+{"cmd":"paint","tile":"~","cells":[[2,1]],"expect":{"painted":1}}
+{"cmd":"exec","code":"[walkable(2,1), walkable(3,1), solid(0,0)]","expect":{"result":[false,true,true]}}
+{"cmd":"tile","char":"~","solid":false}
+{"cmd":"exec","code":"walkable(2,1)","expect":{"result":true}}
+{"cmd":"prefab","name":"orc","props":{"kind":"enemy","hp":7,"sprite":"s","tags":["bad"]},"expect":{"ok":true}}
+{"cmd":"create","prefab":"orc","x":1,"y":1,"expect":{"entity":{"kind":"enemy","hp":7,"prefab":"orc","sprite":"s"}}}
+{"cmd":"create","prefab":"orc","x":2,"y":2,"props":{"hp":1},"expect":{"entity":{"hp":1}}}
+{"cmd":"exec","code":"tagged(\"bad\").len()","expect":{"result":2}}
+{"cmd":"create","prefab":"nothing","x":1,"y":1,"expect":{"ok":false,"error":{"$contains":"no prefab"}}}
+{"cmd":"exec","code":"hud(\"score\", 5); create_prefab(\"orc\", 3, 1)","expect":{"result":3}}
+{"cmd":"step","expect":{"hud":{"score":"5"}}}

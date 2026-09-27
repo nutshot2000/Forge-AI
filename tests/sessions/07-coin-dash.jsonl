@@ -1,0 +1,11 @@
+# The Coin Dash demo: loads, plays with input, snapshots/diff/restore, playtests.
+{"cmd":"load","path":"worlds/coin-dash","expect":{"ok":true,"kinds":{"coin":10,"hero":1,"slime":3}}}
+{"cmd":"snapshot","name":"s0","expect":{"tick":0}}
+{"cmd":"input","down":"right"}
+{"cmd":"step","ticks":3}
+{"cmd":"get","id":1,"expect":{"entity":{"x":5,"y":7}}}
+{"cmd":"diff","from":"s0","expect":{"ticks":[0,3],"changed":{"1":{"x":[2,5]}}}}
+{"cmd":"restore","name":"s0","expect":{"tick":0}}
+{"cmd":"get","id":1,"expect":{"entity":{"x":2}}}
+{"cmd":"trials","from":"s0","runs":10,"ticks":60,"metric":"find(\"slime\").len()","expect":{"summary":{"runs":10,"metric_mean":3}}}
+{"cmd":"step","ticks":1,"expect":{"hud":{"hp":{"$contains":"♥♥♥♥♥"},"gold":"Gold 0 / 10"}}}

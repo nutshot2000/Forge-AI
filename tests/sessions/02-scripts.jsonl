@@ -1,0 +1,19 @@
+# Scripts: compiling, ticking, stop conditions, rules, exec, runtime errors, runaway loops.
+{"cmd":"new","width":12,"height":5}
+{"cmd":"script","name":"walker","code":"fn tick(me) { move_by(me, 1, 0); }","expect":{"ok":true,"functions":["tick(me)"]}}
+{"cmd":"script","name":"bad","code":"fn tick(me) { let = ; }","expect":{"ok":false,"error":"*"}}
+{"cmd":"create","kind":"w","x":1,"y":2,"props":{"script":"walker"},"expect":{"id":1}}
+{"cmd":"step","ticks":3,"expect":{"ok":true,"tick":3,"ran":3}}
+{"cmd":"get","id":1,"expect":{"entity":{"x":4,"y":2}}}
+{"cmd":"step","ticks":100,"until":"get(1).x >= 10","expect":{"until_hit":true,"tick":9}}
+{"cmd":"step","ticks":5,"expect":{"tick":14}}
+{"cmd":"get","id":1,"expect":{"entity":{"x":10}}}
+{"cmd":"script","name":"rules","code":"fn rules() { if now() == 15 { emit(\"ding\", #{ n: 1 }); } }"}
+{"cmd":"step","ticks":2,"expect":{"events":{"counts":{"ding":1}}}}
+{"cmd":"exec","code":"let a = 40; a + 2","expect":{"result":42}}
+{"cmd":"exec","code":"a * 2","expect":{"result":80}}
+{"cmd":"exec","code":"print(\"hi\"); count(\"w\")","expect":{"result":1,"events":{"counts":{"print":1}}}}
+{"cmd":"script","name":"crash","code":"fn tick(me) { let x = get(me).nothing + 1; }"}
+{"cmd":"set","id":1,"key":"script","value":"crash"}
+{"cmd":"step","ticks":3,"expect":{"events":{"counts":{"script_error":1}}}}
+{"cmd":"exec","code":"loop { }","expect":{"ok":false,"error":{"$contains":"operations"}}}

@@ -1,0 +1,17 @@
+# Keyboard input as scripts see it: held keys, one-tick presses, taps.
+{"cmd":"new","width":8,"height":5}
+{"cmd":"script","name":"p","code":"fn tick(me) { if key(\"right\") { move_by(me, 1, 0); } if pressed(\"space\") { set(me, \"jumps\", get(me).jumps + 1); } }"}
+{"cmd":"create","kind":"p","x":1,"y":2,"props":{"script":"p","jumps":0}}
+{"cmd":"input","down":"ArrowRight","expect":{"down":["right"]}}
+{"cmd":"step","ticks":2}
+{"cmd":"get","id":1,"expect":{"entity":{"x":3}}}
+{"cmd":"input","up":"right","expect":{"down":{"$len":0}}}
+{"cmd":"step","ticks":2}
+{"cmd":"get","id":1,"expect":{"entity":{"x":3}}}
+{"cmd":"input","tap":"space"}
+{"cmd":"step","ticks":3}
+{"cmd":"get","id":1,"expect":{"entity":{"jumps":1}}}
+{"cmd":"input","down":" ","expect":{"down":["space"],"pressed":["space"]}}
+{"cmd":"step","ticks":3}
+{"cmd":"get","id":1,"expect":{"entity":{"jumps":2}}}
+{"cmd":"input","clear":true,"expect":{"down":{"$len":0}}}
