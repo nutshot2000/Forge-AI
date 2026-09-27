@@ -71,6 +71,7 @@ fn run_session(file: &Path) -> Vec<String> {
     }
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_forge"))
+        .arg("--no-autosave")
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -2,6 +2,7 @@
 //! Editor UI state (selection, tool, tab...) lives here too, so an agent always knows what
 //! the user is looking at and can drive the editor itself.
 
+use crate::commands;
 use crate::sim::Sim;
 use crate::world::{self, Event, Sprite, TileDef, World};
 use serde::Serialize;
@@ -62,9 +63,18 @@ pub struct App {
     dirty: bool,
     /// Changes since the last autosave.
     autosave_pending: bool,
+    /// Off for tests and throwaway runs (`--no-autosave`).
+    pub autosave_enabled: bool,
     last_autosave: Instant,
     /// Unsaved work found from an earlier session, offered to the user.
     recovery: Option<Value>,
+    /// > 0 while running the commands of a batch: they share one undo entry.
+    in_batch: u32,
+    /// > 0 during a preview: nothing is logged or recorded, and the world is rolled back.
+    quiet: u32,
+    /// Changes the agent suggests for the user to apply or dismiss.
+    proposals: Vec<Value>,
+    proposal_seq: u64,
     pub ui: Ui,
     undo: Vec<(World, String)>,
     redo: Vec<(World, String)>,
@@ -140,64 +150,6 @@ fn str_list(c: &Value, k: &str) -> Vec<String> {
     }
 }
 
-pub const HELP: &str = r#"{
-  "protocol": "one JSON object per line in, one per line out. Every command has a 'cmd' field.",
-  "start_here": "Call look first: it returns the map, what the user has selected/hovered, what they changed since your last look, open requests they pinned on things, assets, HUD and recent activity. The user watches and edits the same world live in the editor; use say to talk to them there, point to show them a spot, and resolve requests with a reply when done.",
-  "commands": {
-    "look": {"_": "everything at once: map view, user's selection + hover, tool/tab, counts, scripts, assets, hud, recent activity, undo depth"},
-    "help": {},
-    "new": {"map": "opt array of tile rows", "width": "or: walled empty room, default 20", "height": "default 10", "seed": "rng seed", "path": "opt folder for later saves"},
-    "load": {"path": "world folder (world.json + scripts/*.rhai)"},
-    "save": {"path": "optional; defaults to the loaded folder"},
-    "recover": {"_": "load the unsaved work found from an earlier session (see 'recovery' in look)"},
-    "discard_recovery": {"_": "throw that unsaved work away"},
-    "state": {"_": "tick, size, counts by kind, scripts, vars, snapshots, compile errors"},
-    "get": {"id": "entity id"},
-    "query": {"kind": "opt", "near": "opt [x,y,r]", "where": "opt Rhai expr over e, e.g. e.hp < 5", "limit": "default 50"},
-    "view": {"x": 0, "y": 0, "w": "default map width", "h": "default map height"},
-    "set": {"id": "entity", "key": "x, y, kind, script or any prop (sprite, color, glyph, hp...)", "value": "any JSON; null removes a prop"},
-    "create": {"kind": "kind (or omit when using prefab)", "prefab": "opt prefab name", "x": 0, "y": 0, "props": "opt object"},
-    "destroy": {"id": "entity"},
-    "paint": {"tile": "one map char", "cells": "[[x,y], ...]", "rect": "or [x,y,w,h]"},
-    "resize": {"width": "new width", "height": "new height", "fill": "char for new cells, default '.'"},
-    "tile": {"char": "map char; omit to list", "name": "opt", "solid": "bool", "color": "css color", "sprite": "opt sprite name", "delete": "opt bool"},
-    "sprite": {"name": "omit to list", "pixels": "rows of palette chars ('.' = transparent), e.g. 8x8", "palette": "{char: css color}", "delete": "opt bool"},
-    "prefab": {"name": "omit to list", "props": "entity template: kind, script, sprite, hp...", "delete": "opt bool"},
-    "script": {"name": "script name", "code": "opt: new source (compile-checked). Omit to read it; omit name to list"},
-    "exec": {"code": "Rhai code run against the live world; variables persist between execs"},
-    "step": {"ticks": "default 1", "until": "opt Rhai expr, stops when true", "kinds": "opt event kinds to show", "max_events": "default 20"},
-    "play": {"tps": "opt ticks per second (default 8): run in real time"},
-    "pause": {},
-    "input": {"tap": "key(s) pressed for one tick", "down": "key(s) to hold", "up": "key(s) to release", "clear": "release all"},
-    "undo": {}, "redo": {},
-    "snapshot": {"name": "save the full world state in memory"},
-    "restore": {"name": "rewind to a snapshot"},
-    "diff": {"from": "snapshot", "to": "opt snapshot; default current world"},
-    "trials": {"from": "snapshot", "runs": 20, "ticks": 500, "until": "opt expr", "metric": "Rhai expr scored at end of each run", "detail": "opt bool"},
-    "events": {"since": "opt event seq", "kinds": "opt", "max_events": "default 50"},
-    "ui": {"selected": "entity id or null", "cell": "[x,y] to select a map tile, or null", "tool": "select|paint|place|erase", "tile": "paint char", "place": "prefab/kind to place", "tab": "activity|scripts|assets|console", "script": "script to open"},
-    "say": {"text": "message shown to the user in the editor"},
-    "request": {"text": "what should happen", "id": "entity it's about", "x": "or a cell", "y": ""},
-    "requests": {"all": "opt bool: include resolved ones"},
-    "resolve": {"rid": "request id", "reply": "what you did (shown to the user)", "status": "opt: done (default) or declined"},
-    "export": {"_": "the whole world as one JSON value (map, entities, assets, scripts)"},
-    "import": {"world": "a value from export"},
-    "set_map": {"rows": "replace the whole map with these rows"},
-    "point": {"x": 0, "y": 0, "id": "or an entity", "label": "opt"},
-    "editor_state": {"_": "full data the editor renders from"}
-  },
-  "script_api": {
-    "entities": "get(id) set(id,key,val) create(kind,x,y[,props]) create_prefab(name,x,y) destroy(id) find(kind) entities() at(x,y) near(x,y,r) count(kind)",
-    "movement": "move_by(id,dx,dy) move_toward(id,x,y) [BFS pathing] path_len(x1,y1,x2,y2)",
-    "map": "tile(x,y) set_tile(x,y,ch) walkable(x,y) solid(x,y) width() height()",
-    "input": "key(name) = held, pressed(name) = pressed this tick. Names: up down left right space enter a-z 0-9 shift",
-    "hud": "hud(key, text) shows text over the game; hud_clear()",
-    "tags": "entities may have a 'tags' array prop; tagged(tag) returns entities with that tag",
-    "world": "now() rand(n) emit(kind[,data]) state(name[,default]) set_state(name,val) print(x)",
-    "hooks": "entity scripts define fn tick(me); a script named 'rules' may define fn rules(), run after entities each tick",
-    "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'"
-  }
-}"#;
 
 /// A short description of a state-changing command for the activity feed, or None for reads.
 fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
@@ -235,6 +187,9 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "set_map" => "replace map".into(),
         "redo" => "redo".into(),
         "say" => format!("💬 {}", s("text")),
+        "propose" => format!("💡 suggests: {}", s("title")),
+        "apply_proposal" => format!("✓ applied suggestion #{}", c["pid"]),
+        "dismiss_proposal" => format!("✗ dismissed suggestion #{}", c["pid"]),
         "point" => format!("📍 {}", if has("label") { s("label") } else { "look here" }),
         "input" if source != "you" => format!("input {}", clip(&c.to_string())),
         "ui" if source != "you" => format!("ui {}", clip(&c.to_string())),
@@ -280,8 +235,13 @@ impl App {
             quit: false,
             dirty: false,
             autosave_pending: false,
+            autosave_enabled: true,
             last_autosave: Instant::now(),
             recovery: None,
+            in_batch: 0,
+            quiet: 0,
+            proposals: vec![],
+            proposal_seq: 0,
             ui: Ui::default(),
             undo: vec![],
             redo: vec![],
@@ -325,6 +285,9 @@ impl App {
     }
 
     fn write_autosave(&mut self) -> Result<(), String> {
+        if !self.autosave_enabled {
+            return Ok(());
+        }
         let dir = self.autosave_dir();
         let w = self.sim.world.borrow();
         w.save_dir(&dir)?;
@@ -411,6 +374,7 @@ impl App {
             "recovery": self.recovery,
             "notices": self.notices,
             "requests": self.requests,
+            "proposals": self.proposals,
             "undo": self.undo.len(),
             "redo": self.redo.len(),
         })
@@ -424,23 +388,13 @@ impl App {
             .iter()
             .filter(|a| a["seq"].as_u64().unwrap_or(0) > self.look_cursor && a["by"] != "agent")
             .collect();
-        let world_diff = self.last_look.as_ref().map(|old| {
-            let d = world::diff(old, &self.sim.world.borrow());
-            // Only keep the parts that say something.
-            let mut m = serde_json::Map::new();
-            for (k, v) in d.as_object().unwrap() {
-                let empty = v.as_array().is_some_and(|a| a.is_empty()) || v.as_object().is_some_and(|o| o.is_empty());
-                if !empty {
-                    m.insert(k.clone(), v.clone());
-                }
-            }
-            Value::Object(m)
-        });
+        let world_diff = self.last_look.as_ref().map(|old| compact_diff(old, &self.sim.world.borrow()));
         let changes = json!({ "by_user_since_last_look": user_changes, "world_diff_since_last_look": world_diff });
         let open_requests: Vec<&Value> = self.requests.iter().filter(|r| r["status"] == "open").collect();
         let mut out = self.look_view();
         out["changes"] = changes;
         out["open_requests"] = json!(open_requests);
+        out["open_proposals"] = json!(self.proposals.iter().filter(|p| p["status"] == "open").map(|p| json!({ "pid": p["pid"], "title": p["title"] })).collect::<Vec<_>>());
         self.look_cursor = self.activity_seq;
         self.last_look = Some(self.sim.world.borrow().clone());
         out
@@ -528,7 +482,42 @@ impl App {
     fn handle(&mut self, c: &Value, source: &str) -> Result<Value, String> {
         let cmd = arg_str(c, "cmd").ok_or("missing 'cmd' (try {\"cmd\":\"help\"})")?;
         match cmd {
-            "help" => Ok(serde_json::from_str(HELP).unwrap()),
+            "help" => Ok(commands::help()),
+            "propose" => {
+                let title = need_str(c, "title")?.to_string();
+                let cmds = c.get("commands").cloned().ok_or("missing 'commands'")?;
+                // Dry-run it so the user can see what it would change.
+                let preview = self.run(&json!({ "cmd": "batch", "commands": cmds, "preview": true }), source);
+                if preview["ok"] != json!(true) {
+                    return Err(format!("the proposed commands fail: {}", preview["error"].as_str().unwrap_or("see results")));
+                }
+                self.proposal_seq += 1;
+                let p = json!({ "pid": self.proposal_seq, "title": title, "by": source, "commands": cmds, "diff": preview["diff"], "status": "open" });
+                self.proposals.push(p.clone());
+                Ok(json!({ "proposal": p }))
+            }
+            "proposals" => {
+                let all = c.get("all") == Some(&json!(true));
+                Ok(json!({ "proposals": self.proposals.iter().filter(|p| all || p["status"] == "open").collect::<Vec<_>>() }))
+            }
+            "apply_proposal" | "dismiss_proposal" => {
+                let pid = arg_int(c, "pid").ok_or("missing 'pid'")?;
+                let i = self.proposals.iter().position(|p| p["pid"] == json!(pid)).ok_or(format!("no proposal {pid}"))?;
+                if self.proposals[i]["status"] != "open" {
+                    return Err(format!("proposal {pid} is already {}", self.proposals[i]["status"]));
+                }
+                if cmd == "dismiss_proposal" {
+                    self.proposals[i]["status"] = json!("dismissed");
+                    return Ok(json!({ "proposal": self.proposals[i] }));
+                }
+                let cmds = self.proposals[i]["commands"].clone();
+                let r = self.run(&json!({ "cmd": "batch", "commands": cmds, "atomic": true }), source);
+                if r["ok"] != json!(true) {
+                    return Err(format!("applying failed and was rolled back: {}", r["error"].as_str().unwrap_or("")));
+                }
+                self.proposals[i]["status"] = json!("applied");
+                Ok(json!({ "proposal": self.proposals[i], "diff": r["diff"] }))
+            }
             "quit" => {
                 if !self.managed {
                     return Err("only an engine started by the Forge app can be told to quit".into());
@@ -1016,7 +1005,7 @@ impl App {
                 let evs = self.sim.events_since(since);
                 Ok(summarize(&evs, c, 50))
             }
-            _ => Err(format!("unknown cmd '{cmd}' (try {{\"cmd\":\"help\"}})")),
+            _ => Err(format!("'{cmd}' is in the catalogue but not implemented")),
         }
     }
 
@@ -1024,9 +1013,15 @@ impl App {
     /// entry and are logged to the editor's activity feed, tagged with `source`.
     pub fn run(&mut self, c: &Value, source: &str) -> Value {
         let name = c.get("cmd").cloned().unwrap_or(Value::Null);
+        if let Err(e) = commands::validate(c) {
+            return json!({ "ok": false, "cmd": name, "error": e });
+        }
         let cmd = name.as_str().unwrap_or("?").to_string();
-        let note = activity_note(c, &cmd, source).map(|d| format!("{source} · {d}"));
-        let undoable = mutates(c, &cmd);
+        if cmd == "batch" {
+            return self.run_batch(c, source);
+        }
+        let note = if self.quiet > 0 { None } else { activity_note(c, &cmd, source).map(|d| format!("{source} · {d}")) };
+        let undoable = mutates(c, &cmd) && self.in_batch == 0;
         if undoable {
             let snap = self.sim.world.borrow().clone();
             self.undo.push((snap, format!("{source}: {}", note.as_deref().unwrap_or(&cmd))));
@@ -1044,6 +1039,7 @@ impl App {
                 self.redo.clear();
                 self.touch();
             }
+            Ok(_) if mutates(c, &cmd) && self.quiet == 0 => self.touch(),
             Err(_) if undoable => {
                 self.undo.pop();
             }
@@ -1078,5 +1074,85 @@ impl App {
             Err(e) => json!({ "ok": false, "cmd": name, "error": e }),
         }
     }
+
+    /// Runs a batch: one undo entry for the lot; `atomic` rolls everything back if any command
+    /// fails; `preview` always rolls back and reports what would have changed.
+    fn run_batch(&mut self, c: &Value, source: &str) -> Value {
+        let cmds = c["commands"].as_array().cloned().unwrap_or_default();
+        let atomic = c.get("atomic") == Some(&json!(true));
+        let preview = c.get("preview") == Some(&json!(true));
+        let before = self.sim.world.borrow().clone();
+        let recording = self.sim.recording;
+        if preview {
+            self.quiet += 1;
+            self.sim.recording = false;
+        }
+        self.in_batch += 1;
+        let mut results = vec![];
+        let mut failed_at = None;
+        for (i, sub) in cmds.iter().enumerate() {
+            let r = if sub.get("cmd") == Some(&json!("batch")) {
+                json!({ "ok": false, "cmd": "batch", "error": "batches can't be nested; put all the commands in one batch" })
+            } else {
+                self.run(sub, source)
+            };
+            let ok = r["ok"] == json!(true);
+            results.push(r);
+            if !ok {
+                failed_at = Some(i);
+                if atomic || preview {
+                    break;
+                }
+            }
+        }
+        self.in_batch -= 1;
+        let diff = compact_diff(&before, &self.sim.world.borrow());
+        let changed = diff.as_object().is_some_and(|m| m.keys().any(|k| k != "ticks"));
+        let rolled_back = preview || (atomic && failed_at.is_some());
+        if rolled_back {
+            self.sim.replace_world(before);
+        } else if changed && self.in_batch == 0 {
+            self.undo.push((before, format!("{source}: batch of {} commands", cmds.len())));
+            if self.undo.len() > UNDO_CAP {
+                self.undo.remove(0);
+            }
+            self.redo.clear();
+            self.touch();
+        }
+        if preview {
+            self.quiet -= 1;
+            self.sim.recording = recording;
+        } else if self.quiet == 0 && changed {
+            let note = format!("{source} · batch of {} commands{}", cmds.len(), if rolled_back { " ✗ rolled back" } else { "" });
+            self.sim.record(Some(&note), vec![], false);
+            let tick = self.sim.world.borrow().tick;
+            self.activity_seq += 1;
+            self.activity.push_back(json!({ "seq": self.activity_seq, "tick": tick, "by": source, "note": note }));
+        }
+        let mut out = json!({
+            "ok": failed_at.is_none(),
+            "cmd": "batch",
+            "results": results,
+            "diff": diff,
+            "rolled_back": rolled_back,
+        });
+        if let Some(i) = failed_at {
+            out["failed_at"] = json!(i);
+            out["error"] = json!(format!("command {i} ({}) failed: {}", results[i]["cmd"], results[i]["error"].as_str().unwrap_or("")));
+        }
+        out
+    }
 }
 
+/// A world diff with the empty sections left out.
+fn compact_diff(a: &World, b: &World) -> Value {
+    let d = world::diff(a, b);
+    let mut m = serde_json::Map::new();
+    for (k, v) in d.as_object().unwrap() {
+        let empty = v.as_array().is_some_and(|a| a.is_empty()) || v.as_object().is_some_and(|o| o.is_empty());
+        if !empty {
+            m.insert(k.clone(), v.clone());
+        }
+    }
+    Value::Object(m)
+}

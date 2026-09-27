@@ -1,0 +1,42 @@
+# Typed commands (helpful errors), batches (atomic, one undo), previews and suggestions.
+{"cmd":"new","width":8,"height":5}
+{"cmd":"stepp","expect":{"ok":false,"error":{"$contains":"Did you mean 'step'"}}}
+{"cmd":"step","tick":5,"expect":{"ok":false,"error":{"$contains":"Did you mean 'ticks'"}}}
+{"cmd":"step","ticks":"five","expect":{"ok":false,"error":{"$contains":"'ticks' must be int"}}}
+{"cmd":"get","expect":{"ok":false,"error":{"$contains":"missing 'id'"}}}
+{"cmd":"undo","now":true,"expect":{"ok":false,"error":{"$contains":"takes no arguments"}}}
+{"cmd":"help","expect":{"commands":{"step":{"group":"run","args":{"ticks":"*"}}}}}
+
+# a batch is one undo step
+{"cmd":"batch","commands":[{"cmd":"create","kind":"a","x":1,"y":1},{"cmd":"create","kind":"b","x":2,"y":1}],"expect":{"ok":true,"rolled_back":false,"diff":{"added":{"$len":2}}}}
+{"cmd":"state","expect":{"entities":2}}
+{"cmd":"undo","expect":{"ok":true}}
+{"cmd":"state","expect":{"entities":0}}
+{"cmd":"redo"}
+{"cmd":"state","expect":{"entities":2}}
+
+# atomic: a failure rolls back everything; non-atomic keeps what worked
+{"cmd":"batch","atomic":true,"commands":[{"cmd":"create","kind":"c","x":3,"y":1},{"cmd":"destroy","id":99}],"expect":{"ok":false,"rolled_back":true,"failed_at":1,"error":{"$contains":"no entity 99"}}}
+{"cmd":"state","expect":{"entities":2}}
+{"cmd":"batch","commands":[{"cmd":"create","kind":"c","x":3,"y":1},{"cmd":"destroy","id":99}],"expect":{"ok":false,"rolled_back":false}}
+{"cmd":"state","expect":{"entities":3}}
+{"cmd":"batch","commands":[{"cmd":"batch","commands":[]}],"expect":{"ok":false,"error":{"$contains":"can't be nested"}}}
+
+# preview reports the change and keeps nothing
+{"cmd":"batch","preview":true,"commands":[{"cmd":"set","id":1,"key":"hp","value":9},{"cmd":"paint","tile":"#","cells":[[4,2]]}],"expect":{"ok":true,"rolled_back":true,"diff":{"changed":{"1":{"hp":[null,9]}},"tiles":[{"x":4,"y":2,"from":".","to":"#"}]}}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
+
+# suggestions: the user applies or dismisses
+{"cmd":"propose","title":"Give a some hp","commands":[{"cmd":"set","id":1,"key":"hp","value":3}],"expect":{"ok":true,"proposal":{"pid":1,"status":"open","diff":{"changed":{"1":{"hp":[null,3]}}}}}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
+{"cmd":"propose","title":"Broken","commands":[{"cmd":"destroy","id":42}],"expect":{"ok":false,"error":{"$contains":"fail"}}}
+{"cmd":"look","expect":{"open_proposals":[{"pid":1,"title":"Give a some hp"}]}}
+{"cmd":"apply_proposal","pid":1,"expect":{"ok":true,"proposal":{"status":"applied"}}}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":3}}}
+{"cmd":"apply_proposal","pid":1,"expect":{"ok":false,"error":{"$contains":"already"}}}
+{"cmd":"undo"}
+{"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
+{"cmd":"propose","title":"Remove b","commands":[{"cmd":"destroy","id":2}]}
+{"cmd":"dismiss_proposal","pid":2,"expect":{"proposal":{"status":"dismissed"}}}
+{"cmd":"proposals","expect":{"proposals":{"$len":0}}}
+{"cmd":"proposals","all":true,"expect":{"proposals":{"$len":2}}}

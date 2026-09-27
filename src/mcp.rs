@@ -1,7 +1,8 @@
 //! Minimal MCP server over stdio. The whole command protocol is exposed as one
 //! batched `forge` tool, so a single call can load, edit, simulate and inspect.
 
-use crate::app::{App, HELP};
+use crate::app::App;
+use crate::commands;
 use serde_json::{json, Value};
 
 const INSTRUCTIONS: &str = "forge is a text-native 2D game engine, and you are the user's right arm in it. \
@@ -11,23 +12,27 @@ Build with new/paint/tile/sprite/prefab/create/script; test with snapshot -> ste
 drive the editor with ui (select, open scripts, switch tools), talk with say, show places with point. Everything is undoable.";
 
 fn tool_def() -> Value {
-    let help: Value = serde_json::from_str(HELP).unwrap();
+    let help = commands::help();
+    let items: Vec<Value> = commands::COMMANDS.iter().map(commands::command_schema).collect();
     json!({
         "name": "forge",
         "description": format!(
-            "Run a batch of forge engine commands in order against the live world (state persists between calls). \
-             Stops at the first failing command unless keep_going is true. Reference:\n{}",
-            serde_json::to_string(&help).unwrap()
+            "Run a batch of forge engine commands in order against the live world the user is editing \
+             (state persists between calls). Stops at the first failing command unless keep_going is true; \
+             atomic makes the whole call all-or-nothing with one undo step. {}\nScript API (Rhai): {}",
+            help["start_here"].as_str().unwrap_or(""),
+            serde_json::to_string(&help["script_api"]).unwrap()
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "commands": {
                     "type": "array",
-                    "description": "Command objects, e.g. [{\"cmd\":\"load\",\"path\":\"worlds/dungeon\"},{\"cmd\":\"view\"}]",
-                    "items": { "type": "object", "properties": { "cmd": { "type": "string" } }, "required": ["cmd"] }
+                    "description": "Command objects, run in order. Start with {\"cmd\":\"look\"}.",
+                    "items": { "anyOf": items }
                 },
-                "keep_going": { "type": "boolean", "description": "Continue after a failed command (default false)." }
+                "keep_going": { "type": "boolean", "description": "Continue after a failed command (default false)." },
+                "atomic": { "type": "boolean", "description": "All or nothing: if any command fails, undo the whole call. One undo step." }
             },
             "required": ["commands"]
         }
@@ -54,6 +59,12 @@ fn call(app: &mut App, params: &Value) -> Value {
         return json!({ "isError": true, "content": [{ "type": "text", "text": "'commands' must be an array" }] });
     };
     let keep_going = args["keep_going"].as_bool().unwrap_or(false);
+    if args["atomic"] == json!(true) {
+        let r = app.run(&json!({ "cmd": "batch", "commands": cmds, "atomic": true }), "agent");
+        let mut lines: Vec<String> = r["results"].as_array().into_iter().flatten().map(render).collect();
+        lines.push(if r["ok"] == json!(true) { "(atomic: all applied, one undo step)".into() } else { format!("(atomic: rolled back: {})", r["error"].as_str().unwrap_or("")) });
+        return json!({ "isError": r["ok"] != json!(true), "content": [{ "type": "text", "text": lines.join("\n") }] });
+    }
     let mut lines = vec![];
     let mut failed = false;
     for (i, c) in cmds.iter().enumerate() {

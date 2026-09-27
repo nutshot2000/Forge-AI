@@ -55,7 +55,14 @@
   .tools > * { pointer-events: auto; }
   .tools .box { display: flex; gap: 4px; align-items: center; background: #151821e6; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
   .tools button, .tools select { padding: 3px 9px; font-size: 12px; }
-  .recover { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; align-items: center; gap: 10px; background: #2a2412f2; color: #ffe2a8; border: 1px solid var(--warn); border-radius: 10px; padding: 6px 8px 6px 14px; font-size: 13px; box-shadow: 0 8px 30px #0008; white-space: nowrap; }
+  .recover { position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; align-items: center; gap: 10px; background: #2a2412f2; color: #ffe2a8; border: 1px solid var(--warn); border-radius: 10px; padding: 6px 8px 6px 14px; font-size: 13px; box-shadow: 0 8px 30px #0008; white-space: nowrap; }
+  #props { position: absolute; top: 56px; right: 10px; width: min(330px, 45%); display: flex; flex-direction: column; gap: 8px; z-index: 4; }
+  .prop { background: #1b1630f2; border: 1px solid var(--agent); border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 28px #0009; font-size: 12.5px; animation: pop .25s ease-out; }
+  .prop h4 { margin: 0 0 6px; font-size: 13px; color: #e9e0ff; } .prop h4 span { color: var(--agent); margin-right: 6px; }
+  .prop ul { margin: 0 0 8px; padding-left: 16px; color: #cfc6ea; max-height: 140px; overflow: auto; }
+  .prop li { margin: 1px 0; }
+  .prop .row { display: flex; gap: 6px; justify-content: flex-end; }
+  .prop .apply { background: #24304f; border-color: var(--you); color: var(--you); }
   .banner { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: #0f2a1ee6; color: var(--you); border: 1px solid var(--you); border-radius: 99px; padding: 3px 14px; font-size: 12px; display: none; }
   .replay { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; background: #151821ee; border: 1px solid var(--warn); color: var(--warn); border-radius: 99px; padding: 4px 6px 4px 14px; font-size: 12px; }
   .hint { position: absolute; bottom: 10px; right: 12px; color: #4b5266; font-size: 11px; }
@@ -199,6 +206,7 @@
     <div class="banner" id="banner">🎮 keyboard controls the game · Esc to stop</div>
     <div class="replay" id="replay"><span id="behind"></span><button id="live">Jump to live</button></div>
     <div id="toasts"></div>
+    <div id="props"></div>
     <div class="hint" id="hint">Click anything, even walls · Shift+drag paints a box · Space play · . step · V B P E tools · Ctrl+Z undo</div>
   </section>
 
@@ -619,7 +627,7 @@ window.addEventListener('mouseup', () => {
   if (drag) {
     const p = hover;
     if (p && (p.x !== drag.from.x || p.y !== drag.from.y))
-      cmd([{ cmd: 'set', id: drag.id, key: 'x', value: p.x }, { cmd: 'set', id: drag.id, key: 'y', value: p.y }]);
+      cmd({ cmd: 'batch', atomic: true, commands: [{ cmd: 'set', id: drag.id, key: 'x', value: p.x }, { cmd: 'set', id: drag.id, key: 'y', value: p.y }] });
     drag = null;
   }
   if (paint) {
@@ -1110,6 +1118,50 @@ async function newScriptFor(e) {
   if (r.ok) { await cmd({ cmd: 'set', id: e.id, key: 'script', value: name }); await refresh(); openScript(name); }
 }
 
+// ---------- suggestions from the agent ----------
+function describeDiff(d) {
+  const lines = [];
+  const name = e => `${e.kind}${e.id != null ? ' #' + e.id : ''}`;
+  for (const e of d.added || []) lines.push(`＋ add ${name(e)} at (${e.x},${e.y})`);
+  for (const e of d.removed || []) lines.push(`－ remove ${name(e)}`);
+  for (const [id, fields] of Object.entries(d.changed || {})) {
+    const ent = es.entities.find(e => String(e.id) === id);
+    const parts = Object.entries(fields).map(([k, [a, b]]) => `${k} ${a === null ? '∅' : JSON.stringify(a)} → ${b === null ? '∅' : JSON.stringify(b)}`);
+    lines.push(`✎ ${ent ? ent.kind + ' ' : ''}#${id}: ${parts.join(', ')}`);
+  }
+  if ((d.tiles || []).length) lines.push(`▦ ${d.tiles.length} tile${d.tiles.length > 1 ? 's' : ''} changed`);
+  for (const s of d.scripts_changed || []) lines.push(`📜 script '${s}' changed`);
+  for (const [k, [a, b]] of Object.entries(d.vars || {})) lines.push(`⚙ ${k}: ${JSON.stringify(a)} → ${JSON.stringify(b)}`);
+  return lines.length ? lines : ['(no visible changes to the world)'];
+}
+function diffSpots(d) {
+  const spots = [];
+  for (const e of d.added || []) spots.push({ x: e.x, y: e.y });
+  for (const id of Object.keys(d.changed || {})) { const e = es.entities.find(e => String(e.id) === id); if (e) spots.push({ x: e.x, y: e.y }); }
+  for (const t of (d.tiles || []).slice(0, 30)) spots.push({ x: t.x, y: t.y });
+  return spots;
+}
+let propKey = '', propSeen = null;
+function renderProposals() {
+  const open = (es.proposals || []).filter(p => p.status === 'open');
+  if (propSeen) for (const p of open) if (!propSeen.has(p.pid)) toast(`Suggestion: ${p.title}`, 'agent');
+  propSeen = new Set((es.proposals || []).map(p => p.pid));
+  const key = JSON.stringify(open);
+  if (key === propKey) return;
+  propKey = key;
+  const box = $('props'); box.innerHTML = '';
+  for (const p of open) {
+    const card = document.createElement('div'); card.className = 'prop';
+    card.innerHTML = `<h4><span>💡</span></h4><ul></ul><div class="row"><button class="dismiss">Dismiss</button><button class="apply">✓ Apply</button></div>`;
+    card.querySelector('h4').append(p.title);
+    for (const l of describeDiff(p.diff || {})) { const li = document.createElement('li'); li.textContent = l; card.querySelector('ul').append(li); }
+    card.onmouseenter = () => { const now = performance.now(); for (const s of diffSpots(p.diff || {})) markers.push({ ...s, label: '', t0: now - 3000 }); };
+    card.querySelector('.apply').onclick = async () => { const r = await cmd({ cmd: 'apply_proposal', pid: p.pid }); if (!r.ok) toast('Could not apply: ' + r.error, 'you'); };
+    card.querySelector('.dismiss').onclick = () => cmd({ cmd: 'dismiss_proposal', pid: p.pid });
+    box.append(card);
+  }
+}
+
 // ---------- requests ----------
 let reqKey = '', reqSeen = null;
 function renderRequests() {
@@ -1287,7 +1339,7 @@ function renderAll() {
   }
   applyUi(es.ui);
   applyNotices(es.notices);
-  renderTree(); renderInspector(); renderScripts(); renderAssets(); renderRequests();
+  renderTree(); renderInspector(); renderScripts(); renderAssets(); renderRequests(); renderProposals();
 }
 
 refresh(); poll(); requestAnimationFrame(draw);

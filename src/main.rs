@@ -8,6 +8,7 @@
 //! (in plain mode only with `--editor`, which also keeps serving after stdin ends).
 
 mod app;
+mod commands;
 mod mcp;
 mod sim;
 mod viewer;
@@ -57,6 +58,7 @@ fn main() {
     let mut app = App::new(Sim::new(World::default()));
     app.build = build_id();
     app.managed = exit_when_closed;
+    app.autosave_enabled = !flag("--no-autosave");
     let feed = Arc::new(Mutex::new(viewer::Feed::default()));
     app.sim.feed = Some(feed.clone());
     if let Some(p) = world_arg {
