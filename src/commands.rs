@@ -40,6 +40,10 @@ pub const COMMANDS: &[Cmd] = &[
         opt("since", "int", "event seq to start after"), opt("kinds", "array", "only these event kinds"), opt("max_events", "int", "default 50")] },
     Cmd { name: "diff", group: "see", desc: "What changed between a snapshot and now (or another snapshot).", args: &[
         req("from", "string", "snapshot name"), opt("to", "string", "snapshot name; default the current world")] },
+    Cmd { name: "screenshot", group: "see", desc: "A PNG of the game (tiles, sprites, animation frame, background, entities) so you can SEE it. Through MCP it arrives as an image. Default: what the player sees through the camera (the whole map if there's no camera).", args: &[
+        opt("view", "string", "camera (default) | map"), opt("area", "array", "[x, y, w, h] in tiles, instead"),
+        opt("scale", "number", "pixels per tile (default: the world's tile size, shrunk for big maps)"),
+        opt("save", "string", "also write the PNG to this file"), opt("data", "bool", "false = don't return the image data (just save)")] },
     Cmd { name: "editor_state", group: "see", desc: "The full data the editor renders from.", args: &[] },
 
     // --- entities ---
@@ -271,7 +275,7 @@ pub const SCRIPT_API: &str = r#"{
   "behaviors": "an entity runs its script plus every script named in its behaviors prop (e.g. [\"platformer_player\", \"health\"]); the behaviour library (behaviors / use_behavior commands) has ready-made ones. has_tag(id, tag) has_prefab(name) exists(id)",
   "hooks": "entity scripts define fn tick(me) and optionally fn on_touch(me, other) (called once when two entities start overlapping; other is a map). A script named 'rules' may define fn rules(). Order each tick: tick scripts -> physics -> on_touch -> rules -> camera",
   "units": "positions are the top-left of the entity box, in tiles (1.0 = one tile); grid games use whole numbers",
-  "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'; 'tags' is an array prop"
+  "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'; fit: contain (default) | stretch | tile (repeat sideways, for platforms); flip (true or \"auto\"), angle, alpha, scale; 'tags' is an array prop"
 }"#;
 
 /// The `help` response, generated from the catalogue.

@@ -1304,6 +1304,31 @@ impl App {
                 }
                 Ok(json!({ "installed": installed, "kept_existing": kept, "attached_to": attached }))
             }
+            "screenshot" => {
+                let w = self.sim.world.borrow();
+                let camera = match arg_str(c, "view") {
+                    Some("map") => false,
+                    Some("camera") | None => true,
+                    Some(v) => return Err(format!("view must be 'camera' or 'map', not '{v}'")),
+                };
+                let area = c.get("area").and_then(Value::as_array).and_then(|a| {
+                    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?, a.get(3)?.as_f64()?])
+                });
+                let shot = crate::raster::screenshot(&w, camera, area, c["scale"].as_f64());
+                let mut out = json!({
+                    "width": shot.width, "height": shot.height, "area": shot.area, "tick": w.tick, "hud": w.hud,
+                    "screen": w.screen,
+                    "note": "HUD and glyph text aren't drawn in screenshots; hud is listed here",
+                });
+                if let Some(p) = arg_str(c, "save") {
+                    std::fs::write(p, &shot.png).map_err(|e| format!("saving {p}: {e}"))?;
+                    out["saved"] = json!(p);
+                }
+                if c.get("data") != Some(&json!(false)) {
+                    out["image"] = json!({ "mime": "image/png", "base64": crate::raster::base64(&shot.png) });
+                }
+                Ok(out)
+            }
             "export_game" => {
                 let title = arg_str(c, "title")
                     .map(String::from)

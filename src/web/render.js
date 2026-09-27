@@ -43,9 +43,20 @@
   };
 
   // Draws a sprite to fit inside a box (keeping its shape), centered and standing on the bottom.
-  R.drawSprite = (g, name, x, y, w, h, frame) => {
+  R.drawSprite = (g, name, x, y, w, h, frame, fit) => {
     const c = R.spriteCanvas(name, frame ?? R.frameIndex(name));
     if (!c) return false;
+    g.imageSmoothingEnabled = false;
+    if (fit === 'stretch') { g.drawImage(c, x, y, w, h); return true; }
+    if (fit === 'tile') {
+      // Repeat sideways at the box's height (platforms, bridges, long walls).
+      const tw = h * c.width / c.height;
+      for (let tx = 0; tx < w - 0.01; tx += tw) {
+        const part = Math.min(tw, w - tx);
+        g.drawImage(c, 0, 0, c.width * part / tw, c.height, x + tx, y, part, h);
+      }
+      return true;
+    }
     const k = Math.min(w / c.width, h / c.height);
     const dw = c.width * k, dh = c.height * k;
     g.imageSmoothingEnabled = false;
@@ -232,7 +243,7 @@
       const moving = Math.abs(ex.vx || 0) > 0.3;
       sprite = (ex.on_ladder && a.climb) || (air && ((ex.vy || 0) < 0 ? a.jump : (a.fall || a.jump))) || (moving && a.run) || a.idle || sprite;
     }
-    if (!(sprite && R.drawSprite(g, sprite, -w / 2, -h / 2, w, h))) {
+    if (!(sprite && R.drawSprite(g, sprite, -w / 2, -h / 2, w, h, undefined, ex.fit))) {
       // No sprite: a colored rounded box with the glyph.
       const bw = w * .84, bh = h * .84;
       g.fillStyle = R.colorOf(e[4], e[5]);

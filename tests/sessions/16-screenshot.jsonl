@@ -1,0 +1,8 @@
+# Screenshots: PNGs of the game for agents that can see images.
+{"cmd":"load","path":"tests/fixtures/skyward"}
+{"cmd":"screenshot","expect":{"ok":true,"width":384,"height":224,"area":[0,2,24,14],"image":{"mime":"image/png","base64":{"$contains":"iVBORw0KGgo"}}}}
+{"cmd":"screenshot","view":"map","scale":8,"data":false,"expect":{"width":512,"height":128,"image":null}}
+{"cmd":"screenshot","area":[0,0,4,4],"scale":10,"save":"$TMP/shot.png","data":false,"expect":{"width":40,"height":40,"saved":{"$contains":"shot.png"}}}
+{"cmd":"screenshot","view":"sideways","expect":{"ok":false,"error":{"$contains":"camera' or 'map"}}}
+{"cmd":"load","path":"tests/fixtures/coin-dash"}
+{"cmd":"screenshot","data":false,"expect":{"width":416,"height":240}}

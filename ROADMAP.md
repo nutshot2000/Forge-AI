@@ -116,7 +116,7 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 The part that makes forge different from other engines.
 
 **Seeing**
-- ☐ **P6.1 Screenshots for the agent:** a `screenshot` command returns a rendered image through MCP, so the agent can *see* the game (art quality, layout) as well as read it.
+- ☑ **P6.1 Screenshots for the agent:** a `screenshot` command returns a rendered image through MCP, so the agent can *see* the game (art quality, layout) as well as read it.
 - ☐ **P6.2 Look v2:** a plain-language scene summary ("hero is boxed in by water on the left; 3 slimes guard the east room"), a region view for huge maps, and what's on screen right now.
 - ☐ **P6.3 Watch mode:** the agent can subscribe to events ("tell me when the player dies") and get a summary of what happened since last time.
 

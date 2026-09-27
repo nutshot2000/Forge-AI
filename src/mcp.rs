@@ -66,9 +66,17 @@ fn call(app: &mut App, params: &Value) -> Value {
         return json!({ "isError": r["ok"] != json!(true), "content": [{ "type": "text", "text": lines.join("\n") }] });
     }
     let mut lines = vec![];
+    let mut images = vec![];
     let mut failed = false;
     for (i, c) in cmds.iter().enumerate() {
-        let resp = app.run(c, "agent");
+        let mut resp = app.run(c, "agent");
+        // Screenshots go back as real images, not as base64 text.
+        if let Some(img) = resp.as_object_mut().and_then(|m| m.remove("image")) {
+            if let Some(b64) = img["base64"].as_str() {
+                images.push(json!({ "type": "image", "data": b64, "mimeType": "image/png" }));
+                resp["image"] = json!(format!("(attached as image {})", images.len()));
+            }
+        }
         let ok = resp["ok"] == json!(true);
         lines.push(render(&resp));
         if !ok {
@@ -79,7 +87,9 @@ fn call(app: &mut App, params: &Value) -> Value {
             }
         }
     }
-    json!({ "isError": failed, "content": [{ "type": "text", "text": lines.join("\n") }] })
+    let mut content = vec![json!({ "type": "text", "text": lines.join("\n") })];
+    content.extend(images);
+    json!({ "isError": failed, "content": content })
 }
 
 /// Handles one JSON-RPC line; returns the response to send, if any.

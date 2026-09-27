@@ -56,6 +56,12 @@ and never see a fraction.
   or set wave/freq/slide/dur/vol/arp yourself); scripts play it with `sfx("jump")`.
 - Free-movement pathfinding: `path_dir(me, x, y)` gives a direction along the shortest path; `path(...)` the whole path.
 
+## Agents can see the game
+
+`{"cmd":"screenshot"}` renders a PNG in the engine itself (no browser): tiles, sprites, animation frames, background,
+camera view. Through MCP it comes back as an image, so any agent that can see images can check the art and layout.
+Options: `"view":"map"` for the whole map, `"area":[x,y,w,h]`, `"scale"`, `"save":"shot.png"`.
+
 ## Building whole games
 
 - **Behaviour library:** `{"cmd":"behaviors"}` lists ready-made scripts: platformer_player, topdown_player, patrol,

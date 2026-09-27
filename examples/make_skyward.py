@@ -275,7 +275,7 @@ c({"cmd": "prefab", "name": "coin", "props": {"kind": "coin", "sprite": "coin", 
 c({"cmd": "prefab", "name": "flag", "props": {"kind": "flag", "sprite": "flag", "w": 1, "h": 2, "z": 1}})
 c({"cmd": "prefab", "name": "checkpoint", "props": {"kind": "checkpoint", "sprite": "checkpoint", "w": 1, "h": 2, "z": 1}})
 c({"cmd": "prefab", "name": "lift", "props": {"kind": "lift", "script": "mover", "sprite": "lift", "physics": "kinematic", "solid": "platform",
-                                              "w": 3, "h": 1, "speed": 2.5, "vx": 2.5, "z": 1}})
+                                              "w": 3, "h": 1, "speed": 2.5, "vx": 2.5, "z": 1, "fit": "tile"}})
 
 # --- level ---
 c({"cmd": "create", "prefab": "player", "x": 2, "y": 13.1})

@@ -3,5 +3,6 @@
 //! player used for exported games, in `web/`).
 
 pub mod physics;
+pub mod raster;
 pub mod sim;
 pub mod world;
