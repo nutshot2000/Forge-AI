@@ -186,6 +186,7 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "import" => "import world".into(),
         "physics" => format!("physics {}", clip(&c.to_string())),
         "camera" => format!("camera {}", clip(&c.to_string())),
+        "background" => "change background".into(),
         "export_game" => "export playable game".into(),
         "create_world" => format!("create world '{}'", s("name")),
         "duplicate_world" => format!("duplicate world '{}' as '{}'", s("name"), s("to")),
@@ -302,7 +303,7 @@ fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
         "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
-        | "create_world" | "physics" | "camera" => true,
+        | "create_world" | "physics" | "camera" | "background" => true,
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
         "prefab" => has("props") || has("delete"),
@@ -479,6 +480,7 @@ impl App {
             "tile_size": w.tile_size,
             "physics": w.physics,
             "camera": w.camera,
+            "background": w.background,
             "unsaved": self.dirty,
             "recovery": self.recovery,
             "notices": self.notices,
@@ -572,6 +574,7 @@ impl App {
             "tick_rate": w.tick_rate,
             "physics": w.physics,
             "camera": w.camera,
+            "background": w.background,
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
@@ -1070,6 +1073,29 @@ impl App {
                 }
                 crate::physics::update_camera(&mut w);
                 Ok(json!({ "camera": w.camera, "tile_size": w.tile_size }))
+            }
+            "background" => {
+                let mut w = self.sim.world.borrow_mut();
+                if c.get("clear") == Some(&json!(true)) {
+                    w.background = Default::default();
+                }
+                match c.get("sky") {
+                    Some(Value::String(s)) => w.background.sky = vec![s.clone()],
+                    Some(Value::Array(a)) => w.background.sky = a.iter().filter_map(Value::as_str).map(String::from).collect(),
+                    Some(Value::Null) => w.background.sky.clear(),
+                    _ => {}
+                }
+                if let Some(layers) = c.get("layers") {
+                    let layers: Vec<crate::world::Layer> = serde_json::from_value(layers.clone())
+                        .map_err(|e| format!("layers: {e} (each layer: {{sprite, parallax, y, height, repeat}})"))?;
+                    for l in &layers {
+                        if !w.sprites.contains_key(&l.sprite) {
+                            return Err(format!("layers: no sprite '{}' (draw it first with the sprite command)", l.sprite));
+                        }
+                    }
+                    w.background.layers = layers;
+                }
+                Ok(json!({ "background": w.background }))
             }
             "export_game" => {
                 let title = arg_str(c, "title")

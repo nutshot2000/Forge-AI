@@ -4,13 +4,16 @@
 // Coordinates are in tiles; a "view" maps them to screen pixels: sx = (x - ox) * s.
 (function () {
   const R = {};
-  let assets = { sprites: {}, tiles: {} };
+  let assets = { sprites: {}, tiles: {}, background: null };
   const spriteCache = new Map();
   const facing = new Map();
 
   R.hue = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; };
   R.colorOf = (kind, c) => c || `hsl(${R.hue(kind)} 68% 62%)`;
-  R.setAssets = (sprites, tiles) => { assets = { sprites: sprites || {}, tiles: tiles || {} }; };
+  R.setAssets = (sprites, tiles, background) => {
+    const bg = background && ((background.sky || []).length || (background.layers || []).length) ? background : null;
+    assets = { sprites: sprites || {}, tiles: tiles || {}, background: bg };
+  };
   R.assets = () => assets;
 
   R.spriteCanvas = name => {
@@ -43,10 +46,17 @@
 
   R.drawTile = (g, ch, px, py, size, x, y) => {
     const def = assets.tiles[ch];
+    // With a background, plain empty tiles are see-through: anything that isn't solid
+    // and has nothing of its own to draw.
+    if (assets.background) {
+      const visual = def && (def.color || def.sprite || def.platform || def.ladder);
+      const solid = def ? def.solid : ch === '#';
+      if (!visual && !solid) return;
+    }
     if (def && def.sprite && R.spriteCanvas(def.sprite)) {
-      // See-through parts of a tile sprite show the floor tile behind them (e.g. sky).
+      // See-through parts of a tile sprite show the floor tile (or the background) behind them.
       if (ch !== '.') R.drawTile(g, '.', px, py, size, x, y);
-      else { g.fillStyle = '#12141a'; g.fillRect(px, py, size, size); }
+      else if (!assets.background) { g.fillStyle = '#12141a'; g.fillRect(px, py, size, size); }
       R.drawSprite(g, def.sprite, px, py, size, size);
       return;
     }
@@ -107,8 +117,37 @@
   R.toWorld = (v, px, py) => [px / v.s + v.ox, py / v.s + v.oy];
 
   // Draws one frame. opts: { prev (frame to interpolate from), t (0..1), now (ms), hud (bool), skip (entity id to hide) }
-  R.drawFrame = (g, frame, rows, v, opts = {}) => {
+  // The sky gradient and parallax layers behind the map.
+  R.drawBackground = (g, v) => {
+    const bg = assets.background;
     g.fillStyle = '#07080b'; g.fillRect(0, 0, v.cw, v.ch);
+    if (!bg) return;
+    const sky = bg.sky || [];
+    if (sky.length === 1) { g.fillStyle = sky[0]; g.fillRect(0, 0, v.cw, v.ch); }
+    else if (sky.length > 1) {
+      // The gradient spans the map's height, so it doesn't slide as the camera moves.
+      const [, top] = R.toScreen(v, 0, 0), [, bottom] = R.toScreen(v, 0, v.H);
+      const grad = g.createLinearGradient(0, top, 0, bottom);
+      sky.forEach((c, i) => grad.addColorStop(i / (sky.length - 1), c));
+      g.fillStyle = grad; g.fillRect(0, 0, v.cw, v.ch);
+    }
+    for (const l of bg.layers || []) {
+      const c = R.spriteCanvas(l.sprite);
+      if (!c) continue;
+      const p = l.parallax ?? .5, S = v.s;
+      const h = (l.height ?? 4) * S, w = h * c.width / c.height;
+      // Parallax: the layer moves p times as fast as the map.
+      const y = (l.y - v.oy * p) * S;
+      let x = (-v.ox * p) * S;
+      g.imageSmoothingEnabled = false;
+      if (l.repeat === false) { g.drawImage(c, x, y, w, h); continue; }
+      x = ((x % w) + w) % w - w;
+      for (; x < v.cw; x += w) g.drawImage(c, Math.floor(x), Math.floor(y), Math.ceil(w) + 1, h);
+    }
+  };
+
+  R.drawFrame = (g, frame, rows, v, opts = {}) => {
+    R.drawBackground(g, v);
     const S = v.s;
     const x0 = Math.max(0, Math.floor(v.ox)), y0 = Math.max(0, Math.floor(v.oy));
     const x1 = Math.min(v.W - 1, Math.ceil(v.ox + v.cw / S)), y1 = Math.min(v.H - 1, Math.ceil(v.oy + v.ch / S));

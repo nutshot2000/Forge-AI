@@ -555,6 +555,8 @@ function draw(now) {
     ctx.fillText('?', bx - 4, by + 5);
   }
 
+  drawMinimap(rows, W, H);
+
   $('tick').textContent = cur.tick;
   const behind = queue.length;
   $('replay').style.display = behind > 12 ? 'flex' : 'none';
@@ -567,6 +569,39 @@ function draw(now) {
   $('banner').style.display = gameKeys ? 'block' : 'none';
   $('view').classList.toggle('gamefocus', !!gameKeys);
   $('viewbtn').textContent = { auto: `🎥 ${m === 'game' ? 'Game' : 'Edit'} view (auto)`, edit: '🗺 Edit view', game: '🎥 Game view' }[viewMode];
+}
+
+// ---------- minimap (when the map doesn't fit on screen) ----------
+let mini = null, miniCache = { key: null, canvas: null };
+function drawMinimap(rows, W, H) {
+  mini = null;
+  if (mode() === 'game') return;  // players don't get one; it would cover the level
+  const mw = V.W, mh = V.H;
+  const visW = W / V.s, visH = H / V.s;
+  if (mw <= visW + 0.5 && mh <= visH + 0.5) return;
+  const k = Math.max(1, Math.floor(Math.min(200 / mw, 110 / mh)));
+  const pw = mw * k, ph = mh * k, x0 = 10, y0 = H - ph - 34;
+  if (miniCache.key !== cur.map + JSON.stringify(FR.assets().tiles)) {
+    const c = document.createElement('canvas'); c.width = pw; c.height = ph;
+    const g = c.getContext('2d'), tiles = FR.assets().tiles;
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      const def = tiles[ch], solid = def ? def.solid : ch === '#';
+      const col = solid ? '#6b7489' : def && def.platform ? '#a08a5a' : def && def.ladder ? '#8a7a5a' : null;
+      if (col) { g.fillStyle = col; g.fillRect(x * k, y * k, k, k); }
+    }));
+    miniCache = { key: cur.map + JSON.stringify(FR.assets().tiles), canvas: c };
+  }
+  ctx.fillStyle = '#0b0d12d8'; ctx.fillRect(x0 - 3, y0 - 3, pw + 6, ph + 6);
+  ctx.strokeStyle = '#2b3140'; ctx.lineWidth = 1; ctx.strokeRect(x0 - 3.5, y0 - 3.5, pw + 7, ph + 7);
+  ctx.drawImage(miniCache.canvas, x0, y0);
+  for (const e of cur.ents) {
+    ctx.fillStyle = e[0] === selected ? '#fff' : FR.colorOf(e[4], e[5]);
+    ctx.fillRect(x0 + e[2] * k, y0 + e[3] * k, Math.max(2, ((e[7] || {}).w ?? 1) * k), Math.max(2, ((e[7] || {}).h ?? 1) * k));
+  }
+  // what's on screen now
+  ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x0 + Math.max(0, V.ox) * k, y0 + Math.max(0, V.oy) * k, Math.min(visW, mw) * k, Math.min(visH, mh) * k);
+  mini = { x0, y0, k, pw, ph };
 }
 
 // ---------- viewport interaction ----------
@@ -587,6 +622,16 @@ function dragPos() {
 cv.addEventListener('mousedown', ev => {
   if (!cur || !V) return;
   document.activeElement.blur();
+  // Clicking the minimap moves the edit view there.
+  if (mini && ev.button === 0) {
+    const b = cv.getBoundingClientRect(), mx = ev.clientX - b.left - mini.x0, my = ev.clientY - b.top - mini.y0;
+    if (mx >= 0 && my >= 0 && mx < mini.pw && my < mini.ph) {
+      if (mode() === 'game') viewMode = 'edit';
+      if (zoom === 1) zoom = 2;
+      pan = { x: mx / mini.k, y: my / mini.k };
+      return;
+    }
+  }
   const p = pointAt(ev);
   if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
     ev.preventDefault();
@@ -1418,7 +1463,7 @@ $('export').onclick = ev => {
 };
 
 function renderAll() {
-  FR.setAssets(es.sprites, es.tiles);
+  FR.setAssets(es.sprites, es.tiles, es.background);
   $('path').textContent = es.path || '(unsaved world)';
   $('play').textContent = es.playing ? '⏸ Pause' : '▶ Play';
   $('play').classList.toggle('on', es.playing);

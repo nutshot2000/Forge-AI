@@ -163,6 +163,35 @@ fn build_engine(w: &W) -> Engine {
         Ok(w.borrow().path_len((cell(&x1)?, cell(&y1)?), (cell(&x2)?, cell(&y2)?)).map_or(-1, |d| d as i64))
     });
 
+    reg!(e, w, "path", move |x1: Dynamic, y1: Dynamic, x2: Dynamic, y2: Dynamic| -> RR<Dynamic> {
+        let w = w.borrow();
+        Ok(match w.path((cell(&x1)?, cell(&y1)?), (cell(&x2)?, cell(&y2)?)) {
+            Some(p) => Dynamic::from_array(p.into_iter().map(|(x, y)| Dynamic::from_array(vec![Dynamic::from(x), Dynamic::from(y)])).collect()),
+            None => Dynamic::UNIT,
+        })
+    });
+    // Free movement along the grid path: a unit direction toward the next tile's center.
+    reg!(e, w, "path_dir", move |id: i64, tx: Dynamic, ty: Dynamic| -> RR<Array> {
+        let w = w.borrow();
+        let en = ent(&w, id, "path_dir")?;
+        let (cx, cy) = en.center();
+        let target = (cell(&tx)?, cell(&ty)?);
+        let goal = match w.path(en.cell(), target) {
+            Some(p) if p.is_empty() => (target.0 as f64 + 0.5, target.1 as f64 + 0.5),
+            // Aim a little further along the path when the next tile is close, so corners are smooth.
+            Some(p) => {
+                let (nx, ny) = p[0];
+                let near = ((nx as f64 + 0.5 - cx).powi(2) + (ny as f64 + 0.5 - cy).powi(2)).sqrt() < 0.3;
+                let (gx, gy) = if near { *p.get(1).unwrap_or(&p[0]) } else { p[0] };
+                (gx as f64 + 0.5, gy as f64 + 0.5)
+            }
+            None => return Ok(vec![Dynamic::from(0.0), Dynamic::from(0.0)]),
+        };
+        let (dx, dy) = (goal.0 - cx, goal.1 - cy);
+        let len = (dx * dx + dy * dy).sqrt();
+        Ok(if len < 0.05 { vec![Dynamic::from(0.0), Dynamic::from(0.0)] } else { vec![Dynamic::from(dx / len), Dynamic::from(dy / len)] })
+    });
+
     // --- physics ---
     reg!(e, w, "set_vel", move |id: i64, vx: Dynamic, vy: Dynamic| -> RR<()> {
         let mut w = w.borrow_mut();

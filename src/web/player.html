@@ -36,7 +36,7 @@ const WASM_B64 = "__WASM__";
     const send = (fn, s) => { const b = enc.encode(s); const p = ex.fg_alloc(b.length); new Uint8Array(ex.memory.buffer).set(b, p); return ex[fn](p, b.length); };
     const take = packed => { const big = BigInt(packed); const p = Number(big >> 32n), n = Number(big & 0xffffffffn); return dec.decode(new Uint8Array(ex.memory.buffer, p, n)); };
     if (!send('fg_load', JSON.stringify(WORLD))) throw new Error(take(ex.fg_error()));
-    R.setAssets(WORLD.sprites, WORLD.tiles);
+    R.setAssets(WORLD.sprites, WORLD.tiles, WORLD.background);
     msg.textContent = '';
 
     let rows = WORLD.map, mapKey = null, prev = null, cur = null, paused = false;

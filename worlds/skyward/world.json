@@ -18,6 +18,36 @@
     "bounds": true,
     "shake": 0.0
   },
+  "background": {
+    "sky": [
+      "#101a33",
+      "#2a4a7a",
+      "#5b7fb8"
+    ],
+    "layers": [
+      {
+        "sprite": "bg_clouds",
+        "parallax": 0.1,
+        "y": 1.0,
+        "height": 3.0,
+        "repeat": true
+      },
+      {
+        "sprite": "bg_mountains",
+        "parallax": 0.25,
+        "y": 3.5,
+        "height": 9.0,
+        "repeat": true
+      },
+      {
+        "sprite": "bg_hills",
+        "parallax": 0.5,
+        "y": 9.0,
+        "height": 6.0,
+        "repeat": true
+      }
+    ]
+  },
   "rng": 3,
   "next_id": 27,
   "map": [
@@ -447,11 +477,6 @@
       "solid": true,
       "sprite": "dirt"
     },
-    ".": {
-      "name": "sky",
-      "solid": false,
-      "color": "#1b2a4a"
-    },
     "=": {
       "name": "plank",
       "solid": false,
@@ -476,6 +501,67 @@
     }
   },
   "sprites": {
+    "bg_clouds": {
+      "palette": {
+        "c": "#3d5286"
+      },
+      "pixels": [
+        "................................................................",
+        "...........ccccccc..............................................",
+        "......ccccccccccccc...........................ccc...............",
+        "...ccccccccccccccccc....................c...ccccccc.............",
+        "..ccccccccccccccccc...............cccccccccccccccccc............",
+        "...ccccccccccccccc...............cccccccccccccccccc.............",
+        "......ccccc.......................ccccccccccccccc...............",
+        "........................................c......................."
+      ]
+    },
+    "bg_hills": {
+      "palette": {
+        "h": "#23462f",
+        "l": "#2f5c3c"
+      },
+      "pixels": [
+        "................................................",
+        "................................................",
+        "................................................",
+        "....llll........................................",
+        "..llhhhhll......................................",
+        "llhhhhhhhhl.....................................",
+        "hhhhhhhhhhhll..............lllllll..............",
+        "hhhhhhhhhhhhhl...........llhhhhhhhll...........l",
+        "hhhhhhhhhhhhhhl........llhhhhhhhhhhhll........lh",
+        "hhhhhhhhhhhhhhhlll...llhhhhhhhhhhhhhhhll....llhh"
+      ]
+    },
+    "bg_mountains": {
+      "palette": {
+        "m": "#2c3b63",
+        "s": "#8ea3d1"
+      },
+      "pixels": [
+        "................................................................",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+        "................................................................",
+        ".........ssssssssss.............................................",
+        "......ssssmmmmmmmmsss...........................................",
+        "....sssmmmmmmmmmmmmmmss........................................s",
+        "..sssmmmmmmmmmmmmmmmmmmss.............sssssssssss.............ss",
+        ".msmmmmmmmmmmmmmmmmmmmmmmmm.......mmmmsmmmsssmmssmmmm.......mmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmm...mmmmmmmmmmmmmmmmmmmmmmmmm...mmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+        "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      ]
+    },
     "checkpoint": {
       "palette": {
         "b": "#5fd3c9",

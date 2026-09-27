@@ -184,6 +184,44 @@ impl Default for Camera {
     }
 }
 
+/// A scrolling backdrop layer: a sprite repeated sideways behind the map.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Layer {
+    pub sprite: String,
+    /// How far the layer moves relative to the camera: 0 = fixed to the screen, 1 = moves with the map.
+    #[serde(default = "half")]
+    pub parallax: f64,
+    /// Top edge of the layer, in map tiles.
+    #[serde(default)]
+    pub y: f64,
+    /// Height of the layer in tiles (width follows the sprite's shape).
+    #[serde(default = "four")]
+    pub height: f64,
+    /// Repeat sideways (default true).
+    #[serde(default = "yes")]
+    pub repeat: bool,
+}
+fn half() -> f64 {
+    0.5
+}
+fn four() -> f64 {
+    4.0
+}
+fn yes() -> bool {
+    true
+}
+
+/// What's drawn behind the map: a sky gradient and parallax layers (far to near).
+/// When a world has one, empty tiles (not solid, no color or sprite) are see-through.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Background {
+    /// One color, or [top, bottom] for a gradient.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sky: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<Layer>,
+}
+
 fn default_tick_rate() -> f64 {
     8.0
 }
@@ -212,6 +250,8 @@ pub struct World {
     pub physics: Physics,
     #[serde(default, skip_serializing_if = "is_default")]
     pub camera: Camera,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub background: Background,
     /// RNG state. Part of the world, so runs are deterministic and snapshots rewind it too.
     #[serde(default)]
     pub rng: u64,
@@ -463,6 +503,33 @@ impl World {
         (d != u32::MAX).then_some(d)
     }
 
+    /// The whole shortest walkable path from `from` to `to` (excluding `from`), if there is one.
+    pub fn path(&self, from: (i64, i64), to: (i64, i64)) -> Option<Vec<(i64, i64)>> {
+        if !self.in_bounds(from) {
+            return None;
+        }
+        if from == to {
+            return Some(vec![]);
+        }
+        let w = self.width();
+        let dist = self.bfs(to, from);
+        let at = |(x, y): (i64, i64)| dist[(y * w + x) as usize];
+        if at(from) == u32::MAX {
+            return None;
+        }
+        let (mut cur, mut out) = (from, vec![]);
+        while cur != to {
+            let next = DIRS
+                .iter()
+                .map(|(dx, dy)| (cur.0 + dx, cur.1 + dy))
+                .filter(|n| self.in_bounds(*n) && at(*n) < at(cur))
+                .min_by_key(|n| at(*n))?;
+            out.push(next);
+            cur = next;
+        }
+        Some(out)
+    }
+
     /// First step of a shortest walkable path from `from` to `to`.
     pub fn next_step(&self, from: (i64, i64), to: (i64, i64)) -> Option<(i64, i64)> {
         if from == to || !self.in_bounds(from) {
@@ -572,8 +639,12 @@ pub fn diff(a: &World, b: &World) -> Value {
     if a.physics != b.physics {
         settings.insert("physics".into(), json!([a.physics, b.physics]));
     }
-    if a.camera != b.camera {
+    let settled = |c: &Camera| Camera { x: 0.0, y: 0.0, shake: 0.0, ..c.clone() };
+    if settled(&a.camera) != settled(&b.camera) {
         settings.insert("camera".into(), json!([a.camera, b.camera]));
+    }
+    if a.background != b.background {
+        settings.insert("background".into(), json!([a.background, b.background]));
     }
     if a.tick_rate != b.tick_rate {
         settings.insert("tick_rate".into(), json!([a.tick_rate, b.tick_rate]));

@@ -58,10 +58,10 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 - ☑ **P1.5 Entity collisions and triggers:** `fn on_touch(me, other)` hooks, trigger zones (areas that fire when entered), collision layers/masks.
 - ☑ **P1.6 Transform:** rotation, scale, flip, opacity, tint per entity.
 - ☑ **P1.7 Camera:** follow a target with smoothing, dead zone, map bounds, zoom, screen shake; `camera` command for the agent.
-- ◐ **P1.8 Big worlds:** maps of any size, stored in chunks, only nearby parts simulated/drawn; minimap. (Done: camera, only visible tiles drawn, editor zoom/pan. To do: chunked storage, minimap.)
-- ☐ **P1.9 Layers:** background, parallax layers, tiles, decorations, entities, foreground, UI; hide/lock per layer.
+- ◐ **P1.8 Big worlds:** maps of any size, stored in chunks, only nearby parts simulated/drawn; minimap. (Done: camera, only visible tiles drawn, editor zoom/pan, minimap. To do: chunked storage for huge maps.)
+- ◐ **P1.9 Layers:** background, parallax layers, tiles, decorations, entities, foreground, UI; hide/lock per layer. (Done: sky gradient + parallax backdrop layers via `background`, entity `z` order. To do: decoration/foreground tile layers, hide/lock.)
 - ☑ **P1.10 Raycasts and line of sight:** `raycast(x1,y1,x2,y2)`, `can_see(a,b)` for enemies, lasers and AI vision.
-- ☐ **P1.11 Pathfinding for free movement:** navigation over the tile grid, then smooth steering to follow the path.
+- ☑ **P1.11 Pathfinding for free movement:** navigation over the tile grid, then smooth steering to follow the path.
 - ☑ **Milestone demo:** Skyward (`worlds/skyward`, built by `examples/make_skyward.py` through engine commands): run, jump with coyote time and buffering, stomp slimes, coins, one-way planks, a ladder, spikes, pits, a moving platform, checkpoint, flag, following camera.
 
 ## Phase 2: Runs anywhere (game runtime in the browser)

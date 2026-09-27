@@ -97,6 +97,10 @@ pub const COMMANDS: &[Cmd] = &[
         opt("x", "number", "center x"), opt("y", "number", "center y"), opt("zoom", "number", "1 = normal"),
         opt("lerp", "number", "0..1 follow smoothing per tick (1 = instant)"), opt("bounds", "bool", "keep the view inside the map"),
         opt("shake", "number", "screen shake strength in tiles"), opt("tile_size", "int", "pixels per tile at 1x (default 16)")] },
+    Cmd { name: "background", group: "edit", desc: "What's behind the map: a sky gradient and parallax layers (sprites repeated sideways, far to near). With a background, empty tiles are see-through.", args: &[
+        opt("sky", "any", "a css color, or [top, bottom] for a gradient; null removes it"),
+        opt("layers", "array", "[{sprite, parallax (0 = fixed, 1 = moves with the map), y (top, in tiles), height (tiles), repeat (default true)}]"),
+        opt("clear", "bool", "remove the whole background first")] },
     Cmd { name: "export_game", group: "files", desc: "Export the game as one self-contained .html file anyone can play in a browser.", args: &[
         opt("title", "string", "game title (default: the world's name)")] },
     Cmd { name: "undo", group: "run", desc: "Undo the last change (the user's or yours).", args: &[] },
@@ -236,7 +240,7 @@ pub fn validate(c: &Value) -> Result<&'static Cmd, String> {
 
 pub const SCRIPT_API: &str = r#"{
   "entities": "get(id) set(id,key,val) create(kind,x,y[,props]) create_prefab(name,x,y) destroy(id) find(kind) entities() at(x,y) near(x,y,r) count(kind) tagged(tag)",
-  "movement": "grid: move_by(id,dx,dy) move_toward(id,x,y) [BFS pathing] path_len(x1,y1,x2,y2)",
+  "movement": "grid: move_by(id,dx,dy) move_toward(id,x,y) [BFS pathing] path_len(x1,y1,x2,y2) path(x1,y1,x2,y2) -> [[x,y],...]; free movement: path_dir(id,x,y) -> [dx,dy] unit direction along the path (multiply by speed for set_vel)",
   "physics": "entity props: physics:true (dynamic body) or \"kinematic\"; vx vy (tiles/s); w h (size, default 1); gravity (multiplier); drag; bounce; max_speed; collide:false; solid:true or \"platform\" (blocks bodies, carries riders). Engine writes on_ground, hit_wall (-1/0/1), hit_ceiling, on_ladder, ground_id. Functions: set_vel(id,vx,vy) push(id,ax,ay) jump(id,height_in_tiles) on_ground(id) center(id) dist(a,b) overlaps(a,b) touching(id) overlaps_tile(id,ch) raycast(x1,y1,x2,y2) can_see(a,b) dt() gravity() approach(cur,target,step) clamp(v,lo,hi) sign(v)",
   "camera": "camera_follow(id) camera_shake(tiles) camera_zoom(z)",
   "tiles": "tile types can be solid, platform (one-way, land from above) or ladder",

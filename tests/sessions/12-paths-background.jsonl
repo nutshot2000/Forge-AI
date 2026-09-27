@@ -1,0 +1,23 @@
+# Pathfinding for grid and free movement, and parallax backgrounds.
+{"cmd":"new","map":["#######","#.....#","#.###.#","#...#.#","#######"]}
+{"cmd":"exec","code":"path(1, 3, 5, 3)","expect":{"result":[[1,2],[1,1],[2,1],[3,1],[4,1],[5,1],[5,2],[5,3]]}}
+{"cmd":"exec","code":"path(1, 3, 1, 3)","expect":{"result":[]}}
+{"cmd":"exec","code":"path(1, 3, 2, 2)","expect":{"result":null}}
+
+# a free-moving chaser steers along the path through the maze
+{"cmd":"physics","preset":"topdown"}
+{"cmd":"script","name":"chaser","code":"fn tick(me) { let d = path_dir(me, 5, 3); set_vel(me, d[0] * 4.0, d[1] * 4.0); }"}
+{"cmd":"create","kind":"chaser","x":1.1,"y":3.1,"props":{"physics":true,"w":0.8,"h":0.8,"script":"chaser"},"expect":{"id":1}}
+{"cmd":"exec","code":"path_dir(1, 5, 3)","expect":{"result":[0,-1]}}
+{"cmd":"step","ticks":300,"until":"get(1).x > 4.9 && get(1).y > 2.9","expect":{"until_hit":true}}
+{"cmd":"events","kinds":["script_error"],"expect":{"counts":{"script_error":null}}}
+
+# backgrounds: sky gradient + parallax layers
+{"cmd":"background","sky":["#1a2a4a","#6a8ac0"],"layers":[{"sprite":"hills","parallax":0.3}],"expect":{"ok":false,"error":{"$contains":"no sprite 'hills'"}}}
+{"cmd":"sprite","name":"hills","palette":{"g":"#2a4a3a"},"pixels":["..g..","ggggg"]}
+{"cmd":"background","sky":["#1a2a4a","#6a8ac0"],"layers":[{"sprite":"hills","parallax":0.3,"y":2,"height":3}],"expect":{"background":{"sky":["#1a2a4a","#6a8ac0"],"layers":[{"sprite":"hills","parallax":0.3,"y":2,"height":3,"repeat":true}]}}}
+{"cmd":"look","expect":{"background":{"layers":{"$len":1}}}}
+{"cmd":"undo"}
+{"cmd":"look","expect":{"background":{}}}
+{"cmd":"background","sky":"#000"}
+{"cmd":"background","clear":true,"expect":{"background":{}}}

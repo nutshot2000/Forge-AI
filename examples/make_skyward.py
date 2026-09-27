@@ -74,7 +74,52 @@ c({"cmd": "sprite", "name": "spikes", "palette": {"s": "#d7dee8", "d": "#8a93a6"
 c({"cmd": "sprite", "name": "lift", "palette": {"m": "#9aa4b8", "d": "#5c6577", "y": "#f5c542"},
    "pixels": ["mmmmmmmm", "dydydydy", "dddddddd", "........", "........", "........", "........", "........"]})
 
-c({"cmd": "tile", "char": ".", "name": "sky", "solid": False, "color": "#1b2a4a"})
+# --- backdrop: sky gradient + parallax layers (pixel art generated below) ---
+import math
+
+
+def mountains(w=64, h=20):
+    rows = []
+    for y in range(h):
+        row = ""
+        for x in range(w):
+            peak = 7 + 5 * abs(math.sin(x * 0.11)) + 4 * abs(math.sin(x * 0.043 + 1.3))
+            top = h - peak
+            row += "s" if top <= y < top + 1.2 and peak > 12 else ("m" if y >= top else ".")
+        rows.append(row)
+    return rows
+
+
+def hills(w=48, h=10):
+    rows = []
+    for y in range(h):
+        row = ""
+        for x in range(w):
+            top = h - (4 + 2.5 * math.sin(x * 0.26) + 1.5 * math.sin(x * 0.09 + 2))
+            row += "l" if top <= y < top + 1 else ("h" if y >= top else ".")
+        rows.append(row)
+    return rows
+
+
+def clouds(w=64, h=8):
+    blobs = [(8, 4, 6, 2.2), (14, 3, 5, 2.5), (40, 5, 7, 2), (47, 4, 4, 2.2)]
+    rows = []
+    for y in range(h):
+        row = ""
+        for x in range(w):
+            row += "c" if any(((x - bx) / rx) ** 2 + ((y - by) / ry) ** 2 <= 1 for bx, by, rx, ry in blobs) else "."
+        rows.append(row)
+    return rows
+
+
+c({"cmd": "sprite", "name": "bg_mountains", "palette": {"m": "#2c3b63", "s": "#8ea3d1"}, "pixels": mountains()})
+c({"cmd": "sprite", "name": "bg_hills", "palette": {"h": "#23462f", "l": "#2f5c3c"}, "pixels": hills()})
+c({"cmd": "sprite", "name": "bg_clouds", "palette": {"c": "#3d5286"}, "pixels": clouds()})
+c({"cmd": "background", "sky": ["#101a33", "#2a4a7a", "#5b7fb8"], "layers": [
+    {"sprite": "bg_clouds", "parallax": 0.1, "y": 1, "height": 3},
+    {"sprite": "bg_mountains", "parallax": 0.25, "y": 3.5, "height": 9},
+    {"sprite": "bg_hills", "parallax": 0.5, "y": 9, "height": 6},
+]})
 c({"cmd": "tile", "char": "G", "name": "grass", "solid": True, "sprite": "grass"})
 c({"cmd": "tile", "char": "#", "name": "dirt", "solid": True, "sprite": "dirt"})
 c({"cmd": "tile", "char": "=", "name": "plank", "platform": True, "sprite": "plank"})
