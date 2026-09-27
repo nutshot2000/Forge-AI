@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>__TITLE__</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #07080b; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+  #msg { position: fixed; inset: 0; display: grid; place-items: center; color: #d9dde8; font: 16px system-ui, sans-serif; text-align: center; pointer-events: none; }
+  #pause { position: fixed; top: 10px; right: 10px; background: #0008; color: #fff; border: 1px solid #fff4; border-radius: 8px; font: 14px system-ui; padding: 6px 10px; }
+  .pad { position: fixed; bottom: 18px; display: none; gap: 10px; user-select: none; -webkit-user-select: none; }
+  .pad.left { left: 18px; } .pad.right { right: 18px; }
+  .pad button { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #fff5; background: #fff2; color: #fff; font: 22px system-ui; }
+  .pad button.on { background: #fff5; }
+  @media (pointer: coarse) { .pad { display: flex; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="msg">Loading…</div>
+<button id="pause" title="Pause (P)">❚❚</button>
+<div class="pad left"><button data-k="left">◀</button><button data-k="right">▶</button><button data-k="down">▼</button></div>
+<div class="pad right"><button data-k="up">▲</button><button data-k="space">A</button></div>
+<script>/*__RENDER__*/</script>
+<script>
+const WORLD = "__WORLD__";
+const WASM_B64 = "__WASM__";
+(async () => {
+  const R = window.ForgeRender, cv = document.getElementById('c'), g = cv.getContext('2d'), msg = document.getElementById('msg');
+  try {
+    const bin = atob(WASM_B64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const { instance } = await WebAssembly.instantiate(bytes, {});
+    const ex = instance.exports, enc = new TextEncoder(), dec = new TextDecoder();
+    const send = (fn, s) => { const b = enc.encode(s); const p = ex.fg_alloc(b.length); new Uint8Array(ex.memory.buffer).set(b, p); return ex[fn](p, b.length); };
+    const take = packed => { const big = BigInt(packed); const p = Number(big >> 32n), n = Number(big & 0xffffffffn); return dec.decode(new Uint8Array(ex.memory.buffer, p, n)); };
+    if (!send('fg_load', JSON.stringify(WORLD))) throw new Error(take(ex.fg_error()));
+    R.setAssets(WORLD.sprites, WORLD.tiles);
+    msg.textContent = '';
+
+    let rows = WORLD.map, mapKey = null, prev = null, cur = null, paused = false;
+    const rate = WORLD.tick_rate || 8, dt = 1000 / rate;
+    const frame = () => { const f = JSON.parse(take(ex.fg_frame())); if (f.map !== mapKey) { mapKey = f.map; rows = JSON.parse(take(ex.fg_map())); } return f; };
+    cur = frame();
+
+    const input = (what, k) => send('fg_input', JSON.stringify({ [what]: [k] }));
+    addEventListener('keydown', e => {
+      if (e.key === 'p' || e.key === 'Escape') { paused = !paused; return; }
+      if (!R.isGameKey(e.key)) return;
+      e.preventDefault(); if (!e.repeat) input('down', R.keyName(e.key));
+    });
+    addEventListener('keyup', e => { if (R.isGameKey(e.key)) input('up', R.keyName(e.key)); });
+    addEventListener('blur', () => send('fg_input', JSON.stringify({ clear: true })));
+    for (const b of document.querySelectorAll('.pad button')) {
+      const k = b.dataset.k;
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('on'); input('down', k); });
+      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { if (b.classList.contains('on')) { b.classList.remove('on'); input('up', k); } });
+    }
+    document.getElementById('pause').onclick = () => { paused = !paused; };
+
+    let last = performance.now(), acc = 0;
+    const loop = now => {
+      requestAnimationFrame(loop);
+      const W = cv.clientWidth, H = cv.clientHeight, dpr = devicePixelRatio || 1;
+      if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+      acc += paused ? 0 : Math.min(250, now - last);
+      last = now;
+      let n = 0;
+      while (acc >= dt && n < 8) { ex.fg_tick(1); prev = cur; cur = frame(); acc -= dt; n++; }
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const v = R.makeView(cur, rows, W, H, { mode: 'camera', now });
+      R.drawFrame(g, cur, rows, v, { prev, t: Math.min(1, acc / dt), now });
+      if (paused) { g.fillStyle = '#0008'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.font = 'bold 28px system-ui'; g.textAlign = 'center'; g.fillText('Paused', W / 2, H / 2); }
+    };
+    requestAnimationFrame(loop);
+  } catch (err) {
+    msg.textContent = 'This game could not start: ' + err.message;
+  }
+})();
+</script>
+</body>
+</html>

@@ -184,6 +184,9 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "request" => format!("📝 request: {}", s("text")),
         "resolve" => format!("✓ resolved request #{}: {}", c["rid"], s("reply")),
         "import" => "import world".into(),
+        "physics" => format!("physics {}", clip(&c.to_string())),
+        "camera" => format!("camera {}", clip(&c.to_string())),
+        "export_game" => "export playable game".into(),
         "create_world" => format!("create world '{}'", s("name")),
         "duplicate_world" => format!("duplicate world '{}' as '{}'", s("name"), s("to")),
         "rename_world" => format!("rename world '{}' to '{}'", s("name"), s("to")),
@@ -277,12 +280,29 @@ fn remember_last_world(p: &std::path::Path) {
     }
 }
 
+/// `inputs` for step/trials: {"0": ["right"], "30": ["right", "space"], "45": []}.
+fn input_timeline(c: &Value) -> Result<Option<crate::sim::InputTimeline>, String> {
+    let Some(obj) = c.get("inputs") else { return Ok(None) };
+    let obj = obj.as_object().ok_or("inputs must be an object: {\"<tick offset>\": [keys held from then on]}")?;
+    let mut t = crate::sim::InputTimeline::new();
+    for (k, v) in obj {
+        let tick: u64 = k.parse().map_err(|_| format!("inputs: '{k}' is not a tick offset (use \"0\", \"30\"...)"))?;
+        let keys = match v {
+            Value::String(s) => vec![norm_key(s)],
+            Value::Array(a) => a.iter().filter_map(Value::as_str).map(norm_key).collect(),
+            _ => return Err(format!("inputs[{k}] must be a key or a list of keys")),
+        };
+        t.insert(tick, keys);
+    }
+    Ok(Some(t))
+}
+
 /// Commands that change the world, and so get an undo entry first.
 fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
         "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
-        | "create_world" => true,
+        | "create_world" | "physics" | "camera" => true,
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
         "prefab" => has("props") || has("delete"),
@@ -329,6 +349,7 @@ impl App {
     pub fn load(&mut self, path: &str) -> Result<Value, String> {
         let p = PathBuf::from(path);
         let w = World::load_dir(&p)?;
+        self.tps = w.tick_rate;
         self.sim.replace_world(w);
         self.dirty = false;
         self.autosave_pending = false;
@@ -454,6 +475,10 @@ impl App {
             "keys_down": w.input.down,
             "ui": self.ui,
             "build": self.build,
+            "tick_rate": w.tick_rate,
+            "tile_size": w.tile_size,
+            "physics": w.physics,
+            "camera": w.camera,
             "unsaved": self.dirty,
             "recovery": self.recovery,
             "notices": self.notices,
@@ -491,7 +516,7 @@ impl App {
         let focus = self
             .ui
             .selected
-            .and_then(|id| w.entities.get(&id).map(|e| (e.x, e.y)))
+            .and_then(|id| w.entities.get(&id).map(|e| e.cell()))
             .or(self.ui.hover.map(|h| (h[0], h[1])))
             .unwrap_or((ww / 2, hh / 2));
         let (vw, vh) = (ww.min(80), hh.min(40));
@@ -507,7 +532,7 @@ impl App {
             let here: Vec<Value> = w
                 .entities
                 .iter()
-                .filter(|(_, e)| e.x == x && e.y == y)
+                .filter(|(_, e)| e.cell() == (x, y))
                 .map(|(id, e)| World::entity_json(*id, e))
                 .collect();
             json!({ "x": x, "y": y, "tile": w.tile(x, y).to_string(), "entities": here })
@@ -544,6 +569,9 @@ impl App {
             "hud": w.hud,
             "vars": w.vars,
             "snapshots": self.sim.snapshots.keys().collect::<Vec<_>>(),
+            "tick_rate": w.tick_rate,
+            "physics": w.physics,
+            "camera": w.camera,
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
@@ -620,8 +648,8 @@ impl App {
                 });
                 let entity = entity.transpose()?;
                 let (x, y) = match &entity {
-                    Some(e) => (e["x"].as_i64().unwrap_or(0), e["y"].as_i64().unwrap_or(0)),
-                    None => (arg_int(c, "x").unwrap_or(0), arg_int(c, "y").unwrap_or(0)),
+                    Some(e) => (e["x"].as_f64().unwrap_or(0.0).floor() as i64, e["y"].as_f64().unwrap_or(0.0).floor() as i64),
+                    None => (c["x"].as_f64().unwrap_or(0.0).floor() as i64, c["y"].as_f64().unwrap_or(0.0).floor() as i64),
                 };
                 self.request_seq += 1;
                 let r = json!({ "rid": self.request_seq, "text": text, "by": source, "entity": entity, "x": x, "y": y, "status": "open", "reply": null });
@@ -643,20 +671,12 @@ impl App {
 
             // --- import / export ---
             "export" => {
-                let w = self.sim.world.borrow();
-                let mut v = serde_json::to_value(&*w).map_err(|e| e.to_string())?;
-                v["scripts"] = json!(w.scripts);
-                v["format"] = json!("forge-world-1");
-                Ok(json!({ "world": v }))
+                Ok(json!({ "world": self.sim.world.borrow().to_bundle() }))
             }
             "import" => {
                 let data = c.get("world").ok_or("missing 'world' (an exported forge world)")?;
-                let mut w: World = serde_json::from_value(data.clone()).map_err(|e| format!("not a forge world: {e}"))?;
-                if let Some(scripts) = data.get("scripts").and_then(Value::as_object) {
-                    w.scripts = scripts.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect();
-                }
-                let max_id = w.entities.keys().next_back().copied().unwrap_or(0);
-                w.next_id = w.next_id.max(max_id + 1);
+                let w = World::from_bundle(data)?;
+                self.tps = w.tick_rate;
                 self.sim.replace_world(w);
                 self.ui.selected = None;
                 self.ui.rev += 1;
@@ -734,9 +754,12 @@ impl App {
                     Some(id) => {
                         let w = self.sim.world.borrow();
                         let e = w.entities.get(&(id as u64)).ok_or(format!("no entity {id}"))?;
-                        (e.x, e.y)
+                        e.cell()
                     }
-                    None => (arg_int(c, "x").ok_or("need x,y or id")?, arg_int(c, "y").ok_or("need x,y or id")?),
+                    None => (
+                        c["x"].as_f64().ok_or("need x,y or id")?.floor() as i64,
+                        c["y"].as_f64().ok_or("need x,y or id")?.floor() as i64,
+                    ),
                 };
                 let label = arg_str(c, "label").unwrap_or("");
                 self.notice("point", json!({ "x": x, "y": y, "label": label }), source);
@@ -760,7 +783,8 @@ impl App {
                 let ticks = arg_int(c, "ticks").unwrap_or(1).max(0) as u64;
                 let start = self.sim.world.borrow().event_seq;
                 let t0 = Instant::now();
-                let (ran, hit) = self.sim.step(ticks, arg_str(c, "until"))?;
+                let inputs = input_timeline(c)?;
+                let (ran, hit) = self.sim.step(ticks, arg_str(c, "until"), inputs.as_ref())?;
                 let ms = t0.elapsed().as_secs_f64() * 1000.0;
                 let evs = self.sim.events_since(start);
                 Ok(json!({
@@ -818,8 +842,8 @@ impl App {
                 let e = w.entities.get_mut(&id).ok_or(format!("no entity {id}"))?;
                 match key {
                     "id" => return Err("id is read-only".into()),
-                    "x" => e.x = v.as_i64().ok_or("x must be an integer")?,
-                    "y" => e.y = v.as_i64().ok_or("y must be an integer")?,
+                    "x" => e.x = v.as_f64().ok_or("x must be a number")?,
+                    "y" => e.y = v.as_f64().ok_or("y must be a number")?,
                     "kind" => e.kind = v.as_str().ok_or("kind must be a string")?.to_string(),
                     "script" => e.script = v.as_str().filter(|s| !s.is_empty()).map(String::from),
                     _ if v.is_null() => {
@@ -832,7 +856,7 @@ impl App {
                 Ok(json!({ "entity": World::entity_json(id, e) }))
             }
             "create" => {
-                let (x, y) = (arg_int(c, "x").ok_or("missing 'x'")?, arg_int(c, "y").ok_or("missing 'y'")?);
+                let (x, y) = (c["x"].as_f64().ok_or("missing 'x'")?, c["y"].as_f64().ok_or("missing 'y'")?);
                 let props = obj_to_props(c.get("props"));
                 let mut w = self.sim.world.borrow_mut();
                 let id = match arg_str(c, "prefab") {
@@ -854,7 +878,7 @@ impl App {
             }
             "query" => {
                 let near = c.get("near").and_then(Value::as_array).and_then(|a| {
-                    Some((a.first()?.as_i64()?, a.get(1)?.as_i64()?, a.get(2)?.as_i64()?))
+                    Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?))
                 });
                 let limit = arg_int(c, "limit").unwrap_or(50).max(0) as usize;
                 let (total, results) = self.sim.query(arg_str(c, "kind"), near, arg_str(c, "where"), limit)?;
@@ -925,6 +949,12 @@ impl App {
                 if let Some(v) = c.get("solid") {
                     def.solid = v.as_bool().unwrap_or(false);
                 }
+                if let Some(v) = c.get("platform") {
+                    def.platform = v.as_bool().unwrap_or(false);
+                }
+                if let Some(v) = c.get("ladder") {
+                    def.ladder = v.as_bool().unwrap_or(false);
+                }
                 for (field, slot) in [("name", &mut def.name), ("color", &mut def.color), ("sprite", &mut def.sprite)] {
                     if let Some(v) = c.get(field) {
                         *slot = v.as_str().map(String::from);
@@ -987,6 +1017,76 @@ impl App {
 
             // --- world files, scripts, experiments ---
             "load" => self.load(need_str(c, "path")?),
+            "physics" => {
+                let mut w = self.sim.world.borrow_mut();
+                match arg_str(c, "preset") {
+                    Some("platformer") => {
+                        w.physics.gravity = 60.0;
+                        w.physics.max_fall = 22.0;
+                        w.tick_rate = 60.0;
+                    }
+                    Some("topdown") => {
+                        w.physics.gravity = 0.0;
+                        w.tick_rate = 60.0;
+                    }
+                    Some("grid") => {
+                        w.physics.gravity = 0.0;
+                        w.tick_rate = 8.0;
+                    }
+                    Some(other) => return Err(format!("unknown preset '{other}' (platformer | topdown | grid)")),
+                    None => {}
+                }
+                if let Some(g) = c["gravity"].as_f64() {
+                    w.physics.gravity = g;
+                }
+                if let Some(m) = c["max_fall"].as_f64() {
+                    w.physics.max_fall = m;
+                }
+                if let Some(r) = c["tick_rate"].as_f64() {
+                    w.tick_rate = r.clamp(1.0, 240.0);
+                }
+                self.tps = w.tick_rate;
+                Ok(json!({ "physics": w.physics, "tick_rate": w.tick_rate, "jump_3_tiles_speed": crate::physics::jump_speed(w.physics.gravity, 3.0) }))
+            }
+            "camera" => {
+                let mut w = self.sim.world.borrow_mut();
+                let cam = &mut w.camera;
+                if let Some(v) = c.get("follow") {
+                    cam.follow = v.as_u64();
+                }
+                for (k, slot) in [("x", &mut cam.x), ("y", &mut cam.y), ("zoom", &mut cam.zoom), ("lerp", &mut cam.lerp), ("shake", &mut cam.shake)] {
+                    if let Some(v) = c[k].as_f64() {
+                        *slot = v;
+                    }
+                }
+                if let Some(v) = c["view"].as_array() {
+                    cam.view = [v.first().and_then(Value::as_f64).unwrap_or(0.0), v.get(1).and_then(Value::as_f64).unwrap_or(0.0)];
+                }
+                if let Some(b) = c["bounds"].as_bool() {
+                    cam.bounds = b;
+                }
+                if let Some(t) = c["tile_size"].as_u64() {
+                    w.tile_size = t.clamp(4, 128) as u32;
+                }
+                crate::physics::update_camera(&mut w);
+                Ok(json!({ "camera": w.camera, "tile_size": w.tile_size }))
+            }
+            "export_game" => {
+                let title = arg_str(c, "title")
+                    .map(String::from)
+                    .or_else(|| self.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()))
+                    .unwrap_or_else(|| "Forge game".into());
+                let dir = crate::viewer::EXPORTS_DIR.get().cloned().unwrap_or_else(|| PathBuf::from("exports"));
+                let file = crate::export::export(&self.sim.world.borrow(), &title, &dir)?;
+                let name = file.file_name().unwrap().to_string_lossy().into_owned();
+                let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+                Ok(json!({
+                    "file": file.display().to_string(),
+                    "size_kb": size / 1024,
+                    "url": self.editor_url().map(|u| format!("{u}/exports/{}", name.replace(' ', "%20"))),
+                    "note": "one self-contained .html file: double-click to play, or send it to anyone",
+                }))
+            }
 
             // --- the world browser ---
             "worlds" => {
@@ -1018,7 +1118,7 @@ impl App {
                         let wall = "#".repeat(w);
                         let mid = format!("#{}#", ".".repeat(w - 2));
                         let map = (0..h).map(|y| if y == 0 || y == h - 1 { wall.clone() } else { mid.clone() }).collect();
-                        World { map, rng: 1, next_id: 1, ..World::default() }
+                        World::blank(map)
                     }
                 };
                 w.save_dir(&dest)?;
@@ -1091,7 +1191,8 @@ impl App {
                     }
                 };
                 let seed = arg_int(c, "seed").unwrap_or(1) as u64;
-                self.sim.replace_world(World { map, rng: seed, next_id: 1, ..World::default() });
+                self.sim.replace_world(World { rng: seed, ..World::blank(map) });
+                self.tps = 8.0;
                 self.path = arg_str(c, "path").map(PathBuf::from);
                 self.ui.selected = None;
                 self.ui.rev += 1;
@@ -1150,12 +1251,14 @@ impl App {
             }
             "trials" => {
                 let t0 = Instant::now();
+                let inputs = input_timeline(c)?;
                 let mut r = self.sim.trials(
                     need_str(c, "from")?,
                     arg_int(c, "runs").unwrap_or(20).max(1) as u64,
                     arg_int(c, "ticks").unwrap_or(500).max(0) as u64,
                     arg_str(c, "until"),
                     need_str(c, "metric")?,
+                    inputs.as_ref(),
                 )?;
                 if c.get("detail") != Some(&json!(true)) {
                     r.as_object_mut().unwrap().remove("runs");

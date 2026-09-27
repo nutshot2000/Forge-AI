@@ -9,20 +9,44 @@
 
 mod app;
 mod commands;
+mod export;
 mod mcp;
-mod sim;
 mod viewer;
-mod world;
+
+// The core lives in the library crate; these keep `crate::world` etc. working here.
+use forge::{physics, sim, world};
 
 use app::App;
 use serde_json::{json, Value};
 use sim::Sim;
 use std::io::{BufRead, Write};
 use std::sync::mpsc::RecvTimeoutError;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use viewer::Msg;
 use world::World;
+
+#[cfg(windows)]
+#[link(name = "winmm")]
+extern "system" {
+    fn timeBeginPeriod(period: u32) -> u32;
+}
+
+/// 1 ms timer resolution on Windows, so 60 Hz play is smooth (the default is ~15.6 ms).
+fn fine_timers() {
+    #[cfg(windows)]
+    unsafe {
+        timeBeginPeriod(1);
+    }
+}
+
+/// The project folder: the nearest ancestor of the exe (or the cwd) containing `worlds/`.
+fn project_root() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.ancestors().find(|d| d.join("worlds").is_dir()).map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+}
 
 /// This build's identity: the modified time of the running exe.
 fn build_id() -> String {
@@ -55,12 +79,21 @@ fn main() {
         .find(|(i, a)| !a.starts_with("--") && (*i == 0 || args[i - 1] != "--port"))
         .map(|(_, a)| a.clone());
 
-    let mut app = App::new(Sim::new(World::default()));
+    fine_timers();
+    let _ = physics::jump_speed(0.0, 0.0);
+    let _ = viewer::EXPORTS_DIR.set(project_root().join("exports"));
+    let mut app = App::new(Sim::new(World::blank(vec!["##########".into(), "#........#".into(), "##########".into()])));
     app.build = build_id();
     app.managed = exit_when_closed;
     app.autosave_enabled = !flag("--no-autosave");
-    let feed = Arc::new(Mutex::new(viewer::Feed::default()));
-    app.sim.feed = Some(feed.clone());
+    let feed: viewer::FeedRef = Arc::new(viewer::Shared::default());
+    {
+        let feed = feed.clone();
+        app.sim.recorder = Some(Box::new(move |w, note, events, jump| {
+            feed.feed.lock().unwrap().push(w, note, events, jump);
+            feed.arrived.notify_all();
+        }));
+    }
     if let Some(p) = world_arg {
         if let Err(e) = app.load(&p) {
             eprintln!("forge: {e}");
@@ -148,12 +181,18 @@ fn main() {
         }
         if !app.playing {
             next_tick = Instant::now();
-        } else if Instant::now() >= next_tick {
-            app.sim.run_tick();
-            app.touch();
-            next_tick += Duration::from_secs_f64(1.0 / app.tps);
-            if next_tick < Instant::now() {
-                next_tick = Instant::now(); // fell behind: don't try to catch up in a burst
+        } else {
+            // Catch up a few ticks if the OS woke us late, so play speed stays true.
+            let dt = Duration::from_secs_f64(1.0 / app.tps);
+            let mut ran = 0;
+            while app.playing && Instant::now() >= next_tick && ran < 4 {
+                app.sim.run_tick();
+                app.touch();
+                next_tick += dt;
+                ran += 1;
+            }
+            if Instant::now() > next_tick + dt * 8 {
+                next_tick = Instant::now(); // far behind (e.g. a slow script): don't burst
             }
         }
     }

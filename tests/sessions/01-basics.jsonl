@@ -3,7 +3,7 @@
 {"cmd":"create","kind":"box","x":2,"y":2,"props":{"hp":3},"expect":{"ok":true,"id":1,"entity":{"kind":"box","x":2,"y":2,"hp":3}}}
 {"cmd":"get","id":1,"expect":{"entity":{"id":1,"hp":3}}}
 {"cmd":"set","id":1,"key":"hp","value":5,"expect":{"ok":true,"entity":{"hp":5}}}
-{"cmd":"set","id":1,"key":"x","value":"left","expect":{"ok":false,"error":{"$contains":"integer"}}}
+{"cmd":"set","id":1,"key":"x","value":"left","expect":{"ok":false,"error":{"$contains":"must be a number"}}}
 {"cmd":"set","id":1,"key":"hp","value":null,"expect":{"ok":true}}
 {"cmd":"get","id":1,"expect":{"entity":{"hp":null}}}
 {"cmd":"undo","expect":{"ok":true}}

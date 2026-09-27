@@ -1,0 +1,72 @@
+# Physics: gravity, landing, one-way platforms, walls, anti-tunneling, moving platforms,
+# touch events, raycasts, camera, scripted input.
+{"cmd":"new","map":["############","#..........#","#..........#","#..........#","#......==..#","#..........#","#..........#","############"]}
+{"cmd":"physics","preset":"platformer","expect":{"physics":{"gravity":60},"tick_rate":60}}
+{"cmd":"physics","preset":"moon","expect":{"ok":false,"error":{"$contains":"unknown preset"}}}
+{"cmd":"tile","char":"=","name":"ledge","platform":true,"expect":{"tile":{"platform":true,"solid":false}}}
+
+# 1: falls and lands flush on the floor
+{"cmd":"create","kind":"box","x":2,"y":1,"props":{"physics":true},"expect":{"id":1}}
+{"cmd":"step","ticks":60}
+{"cmd":"get","id":1,"expect":{"entity":{"x":2,"y":6,"vy":0,"on_ground":true,"hit_wall":0}}}
+
+# 2: lands on a one-way platform from above
+{"cmd":"create","kind":"box","x":7,"y":1,"props":{"physics":true},"expect":{"id":2}}
+{"cmd":"step","ticks":60}
+{"cmd":"get","id":2,"expect":{"entity":{"y":3,"on_ground":true}}}
+
+# 3: jumps up through the platform from below, lands on top of it
+{"cmd":"create","kind":"box","x":8,"y":6,"props":{"physics":true},"expect":{"id":3}}
+{"cmd":"exec","code":"jump(3, 4)","expect":{"result":true}}
+{"cmd":"step","ticks":90}
+{"cmd":"get","id":3,"expect":{"entity":{"x":8,"y":3,"on_ground":true}}}
+
+# 4: slides into the right wall and stops flush
+{"cmd":"exec","code":"set_vel(1, 30, 0)"}
+{"cmd":"step","ticks":60,"until":"get(1).hit_wall == 1","expect":{"until_hit":true}}
+{"cmd":"get","id":1,"expect":{"entity":{"x":10,"y":6,"vx":0,"hit_wall":1}}}
+{"cmd":"step","ticks":1}
+{"cmd":"get","id":1,"expect":{"entity":{"x":10,"hit_wall":0}}}
+
+# 5: 500 tiles/s can't tunnel through the wall
+{"cmd":"create","kind":"bullet","x":2,"y":2,"props":{"physics":true,"gravity":0},"expect":{"id":4}}
+{"cmd":"exec","code":"set_vel(4, 500, 0)"}
+{"cmd":"step","ticks":1}
+{"cmd":"get","id":4,"expect":{"entity":{"x":10,"y":2}}}
+
+# 6: a moving platform carries its rider
+{"cmd":"create","kind":"lift","x":3,"y":5,"props":{"physics":"kinematic","solid":true,"vx":2,"w":2},"expect":{"id":5}}
+{"cmd":"create","kind":"box","x":3,"y":4,"props":{"physics":true},"expect":{"id":6}}
+{"cmd":"step","ticks":30}
+{"cmd":"exec","code":"let l = get(5); let r = get(6); [l.x > 3.9, abs(r.x - l.x) < 0.1, r.y == 4, r.on_ground, r.ground_id]","expect":{"result":[true,true,true,true,5]}}
+
+# 7: touch events fire once when overlap starts
+{"cmd":"script","name":"pickup","code":"fn on_touch(me, other) { if other.kind == \"box\" { emit(\"got\", #{ by: other.id }); destroy(me); } }","expect":{"functions":["on_touch(me, other)"]}}
+{"cmd":"create","kind":"coin","x":2,"y":6,"props":{"script":"pickup"},"expect":{"id":7}}
+{"cmd":"create","kind":"box","x":2,"y":1,"props":{"physics":true},"expect":{"id":8}}
+{"cmd":"step","ticks":60,"expect":{"events":{"counts":{"got":1}}}}
+{"cmd":"exec","code":"count(\"coin\")","expect":{"result":0}}
+
+# 8: raycasts and line of sight
+{"cmd":"exec","code":"let h = raycast(1.5, 2.5, 11.5, 2.5); [h.x, h.y]","expect":{"result":[11,2]}}
+{"cmd":"exec","code":"raycast(1.5, 2.5, 3.5, 2.5)","expect":{"result":null}}
+{"cmd":"exec","code":"can_see(1, 8)","expect":{"result":true}}
+
+# 9: the camera follows, clamped to the map
+{"cmd":"camera","follow":1,"view":[6,4],"lerp":1,"expect":{"camera":{"x":9,"y":6,"follow":1}}}
+{"cmd":"look","expect":{"camera":{"x":9,"y":6}}}
+
+# 10: a scripted player (input timeline)
+{"cmd":"script","name":"walker","code":"fn tick(me) { let e = get(me); let vx = 0; if key(\"right\") { vx = 5; } set_vel(me, vx, e.vy); }"}
+{"cmd":"set","id":6,"key":"script","value":"walker"}
+{"cmd":"set","id":5,"key":"vx","value":0}
+{"cmd":"exec","code":"let before = get(6).x; before","expect":{"result":"*"}}
+{"cmd":"step","ticks":40,"inputs":{"0":["right"],"12":[]}}
+{"cmd":"exec","code":"let moved = get(6).x - before; [moved > 0.9, moved < 1.1]","expect":{"result":[true,true]}}
+{"cmd":"step","ticks":1,"inputs":{"0":["nope"]},"expect":{"ok":true}}
+{"cmd":"step","ticks":1,"inputs":{"soon":["right"]},"expect":{"ok":false,"error":{"$contains":"tick offset"}}}
+
+# 11: top-down worlds have no gravity, so jump() does nothing
+{"cmd":"physics","preset":"topdown","expect":{"physics":{"gravity":0}}}
+{"cmd":"exec","code":"jump(1, 3)","expect":{"result":false}}
+{"cmd":"state","expect":{"entities":7}}

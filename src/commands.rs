@@ -45,7 +45,8 @@ pub const COMMANDS: &[Cmd] = &[
     // --- entities ---
     Cmd { name: "create", group: "edit", desc: "Add an entity, from a kind or a prefab.", args: &[
         opt("kind", "string", "entity kind (required unless prefab is given)"), opt("prefab", "string", "prefab name"),
-        req("x", "int", "tile x"), req("y", "int", "tile y"), opt("props", "object", "properties, may include script/sprite/tags")] },
+        req("x", "number", "left edge in tiles (whole numbers for grid games)"), req("y", "number", "top edge in tiles"),
+        opt("props", "object", "properties, may include script/sprite/tags/physics/w/h")] },
     Cmd { name: "set", group: "edit", desc: "Change one entity property.", args: &[
         req("id", "int", "entity id"), req("key", "string", "x, y, kind, script or any prop (sprite, color, glyph, hp, tags...)"),
         opt("value", "any", "any JSON; null removes the prop")] },
@@ -59,6 +60,7 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "set_map", group: "edit", desc: "Replace the whole map.", args: &[req("rows", "array", "array of strings")] },
     Cmd { name: "tile", group: "edit", desc: "Define what a map character means. Omit char to list tile types.", args: &[
         opt("char", "string", "map character"), opt("name", "string?", "display name"), opt("solid", "bool", "blocks movement"),
+        opt("platform", "bool", "one-way: bodies land on it from above and pass through from below"), opt("ladder", "bool", "climbable (bodies get on_ladder)"),
         opt("color", "string?", "css color"), opt("sprite", "string?", "sprite name"), opt("delete", "bool", "remove this tile type")] },
     Cmd { name: "sprite", group: "edit", desc: "Pixel art as text. Omit name to list; omit pixels to read one.", args: &[
         opt("name", "string", "sprite name"), opt("pixels", "array", "rows of palette chars, '.' = transparent (e.g. 8x8 or 16x16)"),
@@ -74,7 +76,8 @@ pub const COMMANDS: &[Cmd] = &[
     // --- time & testing ---
     Cmd { name: "step", group: "run", desc: "Advance the simulation headlessly (fast).", args: &[
         opt("ticks", "int", "default 1"), opt("until", "string", "Rhai expression; stop when true"),
-        opt("kinds", "array", "event kinds to show"), opt("max_events", "int", "default 20")] },
+        opt("kinds", "array", "event kinds to show"), opt("max_events", "int", "default 20"),
+        opt("inputs", "object", "a scripted player: keys held from each tick offset, e.g. {\"0\":[\"right\"],\"20\":[\"right\",\"space\"],\"40\":[]}")] },
     Cmd { name: "play", group: "run", desc: "Run in real time so the user can watch and play.", args: &[opt("tps", "number", "ticks per second, default 8")] },
     Cmd { name: "pause", group: "run", desc: "Stop real-time play.", args: &[] },
     Cmd { name: "input", group: "run", desc: "Press keys as a player would (names: up down left right space enter a-z 0-9 shift).", args: &[
@@ -85,7 +88,17 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "trials", group: "run", desc: "Replay from a snapshot many times with different seeds and score each run.", args: &[
         req("from", "string", "snapshot name"), opt("runs", "int", "default 20"), opt("ticks", "int", "per run, default 500"),
         opt("until", "string", "stop a run early when true"), req("metric", "string", "Rhai expression scored at the end of each run"),
-        opt("detail", "bool", "include every run")] },
+        opt("detail", "bool", "include every run"), opt("inputs", "object", "scripted player keys per tick offset, as in step")] },
+    Cmd { name: "physics", group: "edit", desc: "World physics. Presets: platformer (gravity 60, 60 ticks/s), topdown (no gravity, 60 ticks/s), grid (8 ticks/s). Units are tiles and seconds.", args: &[
+        opt("preset", "string", "platformer | topdown | grid"), opt("gravity", "number", "tiles/s² downward"),
+        opt("max_fall", "number", "terminal fall speed, tiles/s"), opt("tick_rate", "number", "simulation steps per second")] },
+    Cmd { name: "camera", group: "edit", desc: "What the player sees: follow an entity through a window of the map.", args: &[
+        opt("follow", "int?", "entity to follow, or null"), opt("view", "array", "[width, height] in tiles; [0,0] = whole map"),
+        opt("x", "number", "center x"), opt("y", "number", "center y"), opt("zoom", "number", "1 = normal"),
+        opt("lerp", "number", "0..1 follow smoothing per tick (1 = instant)"), opt("bounds", "bool", "keep the view inside the map"),
+        opt("shake", "number", "screen shake strength in tiles"), opt("tile_size", "int", "pixels per tile at 1x (default 16)")] },
+    Cmd { name: "export_game", group: "files", desc: "Export the game as one self-contained .html file anyone can play in a browser.", args: &[
+        opt("title", "string", "game title (default: the world's name)")] },
     Cmd { name: "undo", group: "run", desc: "Undo the last change (the user's or yours).", args: &[] },
     Cmd { name: "redo", group: "run", desc: "Redo.", args: &[] },
     Cmd { name: "batch", group: "run", desc: "Run several commands as one step: one undo entry; atomic = all or nothing; preview = report the changes without keeping them.", args: &[
@@ -100,9 +113,9 @@ pub const COMMANDS: &[Cmd] = &[
         opt("script", "string?", "script to open"), opt("hover", "array?", "[x, y] (the editor reports this)")] },
     Cmd { name: "say", group: "user", desc: "Show the user a message in the editor.", args: &[req("text", "string", "message")] },
     Cmd { name: "point", group: "user", desc: "Highlight a spot on the user's map.", args: &[
-        opt("x", "int", "tile x"), opt("y", "int", "tile y"), opt("id", "int", "or an entity"), opt("label", "string", "short label")] },
+        opt("x", "number", "tile x"), opt("y", "number", "tile y"), opt("id", "int", "or an entity"), opt("label", "string", "short label")] },
     Cmd { name: "request", group: "user", desc: "Pin a request on an entity or tile (the user does this by right-clicking).", args: &[
-        req("text", "string", "what should happen"), opt("id", "int", "entity it's about"), opt("x", "int", "or a tile"), opt("y", "int", "")] },
+        req("text", "string", "what should happen"), opt("id", "int", "entity it's about"), opt("x", "number", "or a tile"), opt("y", "number", "")] },
     Cmd { name: "requests", group: "user", desc: "List requests.", args: &[opt("all", "bool", "include resolved ones")] },
     Cmd { name: "resolve", group: "user", desc: "Answer a request; the user sees your reply.", args: &[
         req("rid", "int", "request id"), opt("reply", "string", "what you did"), opt("status", "string", "done (default) or declined")] },
@@ -223,12 +236,16 @@ pub fn validate(c: &Value) -> Result<&'static Cmd, String> {
 
 pub const SCRIPT_API: &str = r#"{
   "entities": "get(id) set(id,key,val) create(kind,x,y[,props]) create_prefab(name,x,y) destroy(id) find(kind) entities() at(x,y) near(x,y,r) count(kind) tagged(tag)",
-  "movement": "move_by(id,dx,dy) move_toward(id,x,y) [BFS pathing] path_len(x1,y1,x2,y2)",
+  "movement": "grid: move_by(id,dx,dy) move_toward(id,x,y) [BFS pathing] path_len(x1,y1,x2,y2)",
+  "physics": "entity props: physics:true (dynamic body) or \"kinematic\"; vx vy (tiles/s); w h (size, default 1); gravity (multiplier); drag; bounce; max_speed; collide:false; solid:true or \"platform\" (blocks bodies, carries riders). Engine writes on_ground, hit_wall (-1/0/1), hit_ceiling, on_ladder, ground_id. Functions: set_vel(id,vx,vy) push(id,ax,ay) jump(id,height_in_tiles) on_ground(id) center(id) dist(a,b) overlaps(a,b) touching(id) overlaps_tile(id,ch) raycast(x1,y1,x2,y2) can_see(a,b) dt() gravity() approach(cur,target,step) clamp(v,lo,hi) sign(v)",
+  "camera": "camera_follow(id) camera_shake(tiles) camera_zoom(z)",
+  "tiles": "tile types can be solid, platform (one-way, land from above) or ladder",
   "map": "tile(x,y) set_tile(x,y,ch) walkable(x,y) solid(x,y) width() height()",
   "input": "key(name) = held, pressed(name) = pressed this tick. Names: up down left right space enter a-z 0-9 shift",
   "hud": "hud(key, text) shows text over the game; hud_clear()",
-  "world": "now() rand(n) emit(kind[,data]) state(name[,default]) set_state(name,val) print(x)",
-  "hooks": "entity scripts define fn tick(me); a script named 'rules' may define fn rules(), run after entities each tick",
+  "world": "now() rand(n) rand_float() emit(kind[,data]) state(name[,default]) set_state(name,val) print(x)",
+  "hooks": "entity scripts define fn tick(me) and optionally fn on_touch(me, other) (called once when two entities start overlapping; other is a map). A script named 'rules' may define fn rules(). Order each tick: tick scripts -> physics -> on_touch -> rules -> camera",
+  "units": "positions are the top-left of the entity box, in tiles (1.0 = one tile); grid games use whole numbers",
   "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'; 'tags' is an array prop"
 }"#;
 

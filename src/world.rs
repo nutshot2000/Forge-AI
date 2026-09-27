@@ -1,7 +1,11 @@
 //! Pure world data. Everything here is plain, cloneable and serializable, so
 //! snapshots are just `clone()` and a saved world is a readable text folder.
+//!
+//! Units: one tile = 1.0. Entity positions (`x`, `y`) are the top-left corner of the
+//! entity's box (`w` × `h`, default 1 × 1). Grid games use whole numbers and never see
+//! a fraction; physics games move in fractions of a tile.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
@@ -9,14 +13,34 @@ use std::path::Path;
 const EVENT_CAP: usize = 20_000;
 const DIRS: [(i64, i64); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
 
+/// Whole numbers as JSON integers (so grid worlds read `"x": 3`), others as floats.
+pub fn num(v: f64) -> Value {
+    if v.fract() == 0.0 && v.abs() < 9.0e15 {
+        json!(v as i64)
+    } else {
+        json!(v)
+    }
+}
+
+/// Like `num`, rounded to 1/1000 of a tile for output people and agents read.
+pub fn num_out(v: f64) -> Value {
+    num((v * 1000.0).round() / 1000.0)
+}
+
+fn ser_num<S: Serializer>(v: &f64, s: S) -> Result<S::Ok, S::Error> {
+    num(*v).serialize(s)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entity {
     pub kind: String,
-    pub x: i64,
-    pub y: i64,
+    #[serde(serialize_with = "ser_num")]
+    pub x: f64,
+    #[serde(serialize_with = "ser_num")]
+    pub y: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
-    /// Free-form properties (hp, dmg, glyph, ...). Flattened into the entity in JSON.
+    /// Free-form properties (hp, sprite, vx, w, h...). Flattened into the entity in JSON.
     #[serde(flatten)]
     pub props: BTreeMap<String, Value>,
 }
@@ -30,6 +54,44 @@ impl Entity {
             .and_then(|s| s.chars().next())
             .or_else(|| self.kind.chars().next())
             .unwrap_or('?')
+    }
+
+    pub fn f(&self, key: &str, default: f64) -> f64 {
+        self.props.get(key).and_then(Value::as_f64).unwrap_or(default)
+    }
+
+    pub fn flag(&self, key: &str) -> bool {
+        match self.props.get(key) {
+            Some(Value::Bool(b)) => *b,
+            Some(Value::Null) | None => false,
+            Some(Value::Number(n)) => n.as_f64() != Some(0.0),
+            Some(Value::String(s)) => !s.is_empty(),
+            Some(_) => true,
+        }
+    }
+
+    pub fn w(&self) -> f64 {
+        self.f("w", 1.0)
+    }
+
+    pub fn h(&self) -> f64 {
+        self.f("h", 1.0)
+    }
+
+    pub fn center(&self) -> (f64, f64) {
+        (self.x + self.w() / 2.0, self.y + self.h() / 2.0)
+    }
+
+    /// The tile the entity's center is on.
+    pub fn cell(&self) -> (i64, i64) {
+        let (cx, cy) = self.center();
+        (cx.floor() as i64, cy.floor() as i64)
+    }
+
+    /// Axis-aligned overlap (touching edges don't count).
+    pub fn overlaps(&self, o: &Entity) -> bool {
+        const E: f64 = 1e-6;
+        self.x < o.x + o.w() - E && o.x < self.x + self.w() - E && self.y < o.y + o.h() - E && o.y < self.y + self.h() - E
     }
 }
 
@@ -49,6 +111,12 @@ pub struct TileDef {
     pub name: Option<String>,
     #[serde(default)]
     pub solid: bool,
+    /// One-way platform: solid only when landing on it from above.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub platform: bool,
+    /// Climbable; bodies overlapping it get `on_ladder`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ladder: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -71,16 +139,85 @@ pub struct Input {
     pub taps: BTreeSet<String>,
 }
 
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+/// World-wide physics settings (units: tiles and seconds).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Physics {
+    /// Downward acceleration in tiles/s² (0 for top-down games).
+    pub gravity: f64,
+    /// Terminal falling speed in tiles/s.
+    pub max_fall: f64,
+}
+
+impl Default for Physics {
+    fn default() -> Self {
+        Physics { gravity: 0.0, max_fall: 30.0 }
+    }
+}
+
+/// What the player sees. `view` is the visible area in tiles ([0, 0] = the whole map).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Camera {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follow: Option<u64>,
+    /// Center of the view, in tiles.
+    pub x: f64,
+    pub y: f64,
+    pub view: [f64; 2],
+    pub zoom: f64,
+    /// 0..1: how quickly the camera catches up with its target each tick (1 = instantly).
+    pub lerp: f64,
+    /// Keep the view inside the map.
+    pub bounds: bool,
+    /// Screen shake strength in tiles; decays over time.
+    pub shake: f64,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Camera { follow: None, x: 0.0, y: 0.0, view: [0.0, 0.0], zoom: 1.0, lerp: 0.2, bounds: true, shake: 0.0 }
+    }
+}
+
+fn default_tick_rate() -> f64 {
+    8.0
+}
+fn is_default_tick_rate(v: &f64) -> bool {
+    *v == 8.0
+}
+fn default_tile_size() -> u32 {
+    16
+}
+fn is_default_tile_size(v: &u32) -> bool {
+    *v == 16
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct World {
     #[serde(default)]
     pub tick: u64,
+    /// Simulation steps per second. Physics uses dt = 1 / tick_rate, so results don't
+    /// depend on how fast the editor plays it back.
+    #[serde(default = "default_tick_rate", skip_serializing_if = "is_default_tick_rate")]
+    pub tick_rate: f64,
+    /// Pixels per tile when the game is shown at 1× (sprites are drawn to fit their box).
+    #[serde(default = "default_tile_size", skip_serializing_if = "is_default_tile_size")]
+    pub tile_size: u32,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub physics: Physics,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub camera: Camera,
     /// RNG state. Part of the world, so runs are deterministic and snapshots rewind it too.
     #[serde(default)]
     pub rng: u64,
     #[serde(default)]
     pub next_id: u64,
-    /// Tile rows. `#` blocks movement; every other character is walkable.
+    /// Tile rows. `#` blocks movement; other characters are floor unless `tiles` says otherwise.
     pub map: Vec<String>,
     #[serde(default)]
     pub vars: BTreeMap<String, Value>,
@@ -99,6 +236,9 @@ pub struct World {
     pub hud: BTreeMap<String, String>,
     #[serde(skip)]
     pub input: Input,
+    /// Pairs of entities overlapping at the end of the last tick (for touch events).
+    #[serde(skip)]
+    pub contacts: BTreeSet<(u64, u64)>,
     /// Loaded from / saved to `scripts/<name>.rhai` next to world.json.
     #[serde(skip)]
     pub scripts: BTreeMap<String, String>,
@@ -109,11 +249,15 @@ pub struct World {
 }
 
 impl World {
+    /// An empty world with sensible defaults (the derive's Default leaves tick_rate at 0).
+    pub fn blank(map: Vec<String>) -> World {
+        World { map, rng: 1, next_id: 1, tick_rate: 8.0, tile_size: 16, ..World::default() }
+    }
+
     pub fn load_dir(dir: &Path) -> Result<World, String> {
         let text = std::fs::read_to_string(dir.join("world.json"))
             .map_err(|e| format!("reading {}: {e}", dir.join("world.json").display()))?;
-        let mut w: World =
-            serde_json::from_str(&text).map_err(|e| format!("parsing world.json: {e}"))?;
+        let mut w: World = serde_json::from_str(&text).map_err(|e| format!("parsing world.json: {e}"))?;
         let sdir = dir.join("scripts");
         if sdir.is_dir() {
             for entry in std::fs::read_dir(&sdir).map_err(|e| e.to_string())? {
@@ -125,9 +269,14 @@ impl World {
                 }
             }
         }
-        let max_id = w.entities.keys().next_back().copied().unwrap_or(0);
-        w.next_id = w.next_id.max(max_id + 1);
+        w.fix_ids();
         Ok(w)
+    }
+
+    /// Makes sure new entities get ids above every existing one.
+    pub fn fix_ids(&mut self) {
+        let max_id = self.entities.keys().next_back().copied().unwrap_or(0);
+        self.next_id = self.next_id.max(max_id + 1);
     }
 
     pub fn save_dir(&self, dir: &Path) -> Result<(), String> {
@@ -135,10 +284,30 @@ impl World {
         let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         std::fs::write(dir.join("world.json"), text + "\n").map_err(|e| e.to_string())?;
         for (name, src) in &self.scripts {
-            std::fs::write(dir.join("scripts").join(format!("{name}.rhai")), src)
-                .map_err(|e| e.to_string())?;
+            std::fs::write(dir.join("scripts").join(format!("{name}.rhai")), src).map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+
+    /// The whole world as one JSON value, scripts included (export / web player format).
+    pub fn to_bundle(&self) -> Value {
+        let mut v = serde_json::to_value(self).unwrap_or(Value::Null);
+        v["scripts"] = json!(self.scripts);
+        v["format"] = json!("forge-world-1");
+        v
+    }
+
+    pub fn from_bundle(data: &Value) -> Result<World, String> {
+        let mut w: World = serde_json::from_value(data.clone()).map_err(|e| format!("not a forge world: {e}"))?;
+        if let Some(scripts) = data.get("scripts").and_then(Value::as_object) {
+            w.scripts = scripts.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect();
+        }
+        w.fix_ids();
+        Ok(w)
+    }
+
+    pub fn dt(&self) -> f64 {
+        1.0 / self.tick_rate.max(0.001)
     }
 
     pub fn width(&self) -> i64 {
@@ -158,10 +327,7 @@ impl World {
         if x < 0 || y < 0 {
             return '#';
         }
-        self.map
-            .get(y as usize)
-            .and_then(|r| r.chars().nth(x as usize))
-            .unwrap_or('#')
+        self.map.get(y as usize).and_then(|r| r.chars().nth(x as usize)).unwrap_or('#')
     }
 
     pub fn set_tile(&mut self, x: i64, y: i64, c: char) -> bool {
@@ -178,9 +344,13 @@ impl World {
         true
     }
 
-    pub fn is_solid_char(&self, c: char) -> bool {
+    pub fn tile_def(&self, c: char) -> Option<&TileDef> {
         let mut buf = [0u8; 4];
-        match self.tiles.get(&*c.encode_utf8(&mut buf)) {
+        self.tiles.get(&*c.encode_utf8(&mut buf))
+    }
+
+    pub fn is_solid_char(&self, c: char) -> bool {
+        match self.tile_def(c) {
             Some(def) => def.solid,
             None => c == '#',
         }
@@ -199,18 +369,16 @@ impl World {
         }
     }
 
-    pub fn spawn(&mut self, kind: &str, x: i64, y: i64, mut props: BTreeMap<String, Value>) -> u64 {
+    pub fn spawn(&mut self, kind: &str, x: f64, y: f64, mut props: BTreeMap<String, Value>) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        let script = props
-            .remove("script")
-            .and_then(|v| v.as_str().map(String::from));
+        let script = props.remove("script").and_then(|v| v.as_str().map(String::from));
         self.entities.insert(id, Entity { kind: kind.into(), x, y, script, props });
         id
     }
 
     /// Creates an entity from a prefab; `extra` props override the prefab's.
-    pub fn spawn_prefab(&mut self, name: &str, x: i64, y: i64, extra: BTreeMap<String, Value>) -> Result<u64, String> {
+    pub fn spawn_prefab(&mut self, name: &str, x: f64, y: f64, extra: BTreeMap<String, Value>) -> Result<u64, String> {
         let mut props = self.prefabs.get(name).cloned().ok_or(format!("no prefab '{name}'"))?;
         props.extend(extra);
         let kind = match props.remove("kind") {
@@ -242,13 +410,17 @@ impl World {
         let mut m = Map::new();
         m.insert("id".into(), json!(id));
         m.insert("kind".into(), json!(e.kind));
-        m.insert("x".into(), json!(e.x));
-        m.insert("y".into(), json!(e.y));
+        m.insert("x".into(), num_out(e.x));
+        m.insert("y".into(), num_out(e.y));
         if let Some(s) = &e.script {
             m.insert("script".into(), json!(s));
         }
         for (k, v) in &e.props {
-            m.insert(k.clone(), v.clone());
+            let v = match (k.as_str(), v.as_f64()) {
+                ("vx" | "vy", Some(f)) => num_out(f),
+                _ => v.clone(),
+            };
+            m.insert(k.clone(), v);
         }
         Value::Object(m)
     }
@@ -323,10 +495,7 @@ impl World {
                         if x < 0 || y < 0 {
                             return ' ';
                         }
-                        self.map
-                            .get(y as usize)
-                            .and_then(|r| r.chars().nth(x as usize))
-                            .unwrap_or(' ')
+                        self.map.get(y as usize).and_then(|r| r.chars().nth(x as usize)).unwrap_or(' ')
                     })
                     .collect()
             })
@@ -336,7 +505,8 @@ impl World {
         let mut legend = BTreeMap::new();
         for (_, e) in ents {
             let g = e.glyph();
-            let (gx, gy) = (e.x - x0, e.y - y0);
+            let (cx, cy) = e.cell();
+            let (gx, gy) = (cx - x0, cy - y0);
             if gx >= 0 && gy >= 0 && gx < w && gy < h {
                 grid[gy as usize][gx as usize] = g;
                 legend.insert(g.to_string(), e.kind.clone());
@@ -395,9 +565,19 @@ pub fn diff(a: &World, b: &World) -> Value {
         .keys()
         .chain(b.scripts.keys())
         .filter(|k| a.scripts.get(*k) != b.scripts.get(*k))
-        .collect::<std::collections::BTreeSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
+    let mut settings = Map::new();
+    if a.physics != b.physics {
+        settings.insert("physics".into(), json!([a.physics, b.physics]));
+    }
+    if a.camera != b.camera {
+        settings.insert("camera".into(), json!([a.camera, b.camera]));
+    }
+    if a.tick_rate != b.tick_rate {
+        settings.insert("tick_rate".into(), json!([a.tick_rate, b.tick_rate]));
+    }
     json!({
         "ticks": [a.tick, b.tick],
         "added": added,
@@ -406,5 +586,6 @@ pub fn diff(a: &World, b: &World) -> Value {
         "tiles": tiles,
         "vars": vars,
         "scripts_changed": scripts,
+        "settings": settings,
     })
 }
