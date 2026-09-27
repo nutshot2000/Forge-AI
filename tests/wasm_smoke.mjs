@@ -1,6 +1,6 @@
 // Smoke test for the WebAssembly engine used by exported games:
 //   node tests/wasm_smoke.mjs
-// Loads worlds/coin-dash, holds "right" for 3 ticks, and checks the knight moved exactly
+// Loads tests/fixtures/coin-dash, holds "right" for 3 ticks, and checks the knight moved exactly
 // like the native engine does (x 2 -> 5). Exits non-zero on failure.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ const ex = instance.exports, enc = new TextEncoder(), dec = new TextDecoder();
 const send = (fn, s) => { const b = enc.encode(s); const p = ex.fg_alloc(b.length); new Uint8Array(ex.memory.buffer).set(b, p); return ex[fn](p, b.length); };
 const take = packed => { const big = BigInt(packed); return dec.decode(new Uint8Array(ex.memory.buffer, Number(big >> 32n), Number(big & 0xffffffffn))); };
 
-const dir = join(root, 'worlds/coin-dash');
+const dir = join(root, 'tests/fixtures/coin-dash');
 const world = JSON.parse(readFileSync(join(dir, 'world.json'), 'utf8'));
 world.scripts = {};
 for (const f of readdirSync(join(dir, 'scripts'))) world.scripts[f.replace(/\.rhai$/, '')] = readFileSync(join(dir, 'scripts', f), 'utf8');

@@ -187,6 +187,7 @@ fn main() {
             let mut ran = 0;
             while app.playing && Instant::now() >= next_tick && ran < 4 {
                 app.sim.run_tick();
+                app.after_ticks();
                 app.touch();
                 next_tick += dt;
                 ran += 1;

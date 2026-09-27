@@ -1,9 +1,44 @@
 //! Exporting a game as one self-contained HTML file: the web player, the renderer, the
 //! engine compiled to WebAssembly and the world, all inlined. Double-click to play.
 
+use crate::sim::Sim;
 use crate::viewer::RENDER_JS;
 use crate::world::World;
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+/// Level names a world's scripts can `goto_level("...")` (string literals).
+fn goto_targets(w: &World) -> Vec<String> {
+    let mut out = vec![];
+    for src in w.scripts.values() {
+        for part in src.split("goto_level(").skip(1) {
+            let part = part.trim_start();
+            let Some(q) = part.chars().next().filter(|c| *c == '"' || *c == '\'') else { continue };
+            if let Some(end) = part[1..].find(q) {
+                out.push(part[1..1 + end].to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Every level reachable from the current world through goto(), bundled for export.
+pub fn linked_levels(sim: &Sim) -> BTreeMap<String, Value> {
+    let mut found = BTreeMap::new();
+    let mut todo = goto_targets(&sim.world.borrow());
+    let current = sim.world.borrow().level.clone();
+    while let Some(name) = todo.pop() {
+        if name == current || found.contains_key(&name) {
+            continue;
+        }
+        if let Ok(w) = sim.load_level(&name) {
+            todo.extend(goto_targets(&w));
+            found.insert(name, w.to_bundle());
+        }
+    }
+    found
+}
 
 const PLAYER: &str = include_str!("web/player.html");
 
@@ -45,11 +80,14 @@ fn slug(s: &str) -> String {
 }
 
 /// Writes `<dir>/<title>.html` and returns its path.
-pub fn export(w: &World, title: &str, dir: &Path) -> Result<PathBuf, String> {
+pub fn export(w: &World, levels: &BTreeMap<String, Value>, title: &str, dir: &Path) -> Result<PathBuf, String> {
     let wasm = find_wasm().ok_or("the web player isn't built yet: run install.ps1, which builds it (web/ for wasm32-unknown-unknown)")?;
     let bytes = std::fs::read(&wasm).map_err(|e| format!("reading {}: {e}", wasm.display()))?;
     // Inside a <script>, "</" must not appear literally.
-    let world = w.to_bundle().to_string().replace("</", "<\\/");
+    let mut bundle = w.to_bundle();
+    bundle["level_name"] = serde_json::json!(w.level);
+    bundle["levels"] = serde_json::json!(levels);
+    let world = bundle.to_string().replace("</", "<\\/");
     let html = PLAYER
         .replace("__TITLE__", &escape_html(title))
         .replace("/*__RENDER__*/", RENDER_JS)

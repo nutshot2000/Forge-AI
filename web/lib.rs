@@ -57,8 +57,16 @@ pub unsafe extern "C" fn fg_load(p: *mut u8, n: usize) -> u32 {
     let text = take(p, n);
     let loaded = serde_json::from_str::<Value>(&text).map_err(|e| e.to_string()).and_then(|v| World::from_bundle(&v));
     match loaded {
-        Ok(w) => {
-            let sim = Sim::new(w);
+        Ok(mut w) => {
+            let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+            w.level = v["level_name"].as_str().unwrap_or("").to_string();
+            let mut sim = Sim::new(w);
+            for (name, lv) in v["levels"].as_object().into_iter().flatten() {
+                if let Ok(mut lw) = World::from_bundle(lv) {
+                    lw.level = name.clone();
+                    sim.levels.insert(name.clone(), lw);
+                }
+            }
             if let Some((name, err)) = sim.compile_errors.iter().next() {
                 ERR.with(|e| *e.borrow_mut() = format!("script '{name}' has an error: {err}"));
             }

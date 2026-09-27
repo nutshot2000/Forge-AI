@@ -264,6 +264,78 @@ pub struct Background {
     pub layers: Vec<Layer>,
 }
 
+/// A pending timer. Entity timers call that entity's `on_timer(me, name, data)`;
+/// world timers (no entity) call `on_timer(name, data)` in the `rules` script.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Timer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity: Option<u64>,
+    pub name: String,
+    /// The tick it fires on.
+    pub due: u64,
+    /// Repeat every N ticks (0 = once).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub every: u64,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub data: Value,
+}
+fn is_zero(v: &u64) -> bool {
+    *v == 0
+}
+
+/// A number property easing from one value to another over some ticks.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Tween {
+    pub id: u64,
+    pub key: String,
+    pub from: f64,
+    pub to: f64,
+    pub start: u64,
+    pub dur: u64,
+    /// linear | in | out | inout | bounce
+    #[serde(default)]
+    pub ease: String,
+}
+
+impl Tween {
+    pub fn value_at(&self, tick: u64) -> (f64, bool) {
+        let t = ((tick + 1).saturating_sub(self.start) as f64 / self.dur.max(1) as f64).clamp(0.0, 1.0);
+        let k = match self.ease.as_str() {
+            "in" => t * t,
+            "out" => 1.0 - (1.0 - t) * (1.0 - t),
+            "inout" => if t < 0.5 { 2.0 * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(2) / 2.0 },
+            "bounce" => {
+                let (n, d) = (7.5625, 2.75);
+                if t < 1.0 / d { n * t * t }
+                else if t < 2.0 / d { let t = t - 1.5 / d; n * t * t + 0.75 }
+                else if t < 2.5 / d { let t = t - 2.25 / d; n * t * t + 0.9375 }
+                else { let t = t - 2.625 / d; n * t * t + 0.984375 }
+            }
+            _ => t,
+        };
+        (self.from + (self.to - self.from) * k, t >= 1.0)
+    }
+}
+
+/// A full-screen overlay: title screens, pause, game over, level complete.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Screen {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub prompt: String,
+}
+
+/// A message between entities, delivered to `on_message(me, msg, data)`.
+#[derive(Clone, Debug)]
+pub struct Message {
+    /// 0 = everyone listening.
+    pub to: u64,
+    pub msg: String,
+    pub data: Value,
+}
+
 fn default_tick_rate() -> f64 {
     8.0
 }
@@ -318,6 +390,26 @@ pub struct World {
     /// On-screen text set by scripts (score, lives...), shown over the game.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub hud: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timers: Vec<Timer>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tweens: Vec<Tween>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screen: Option<Screen>,
+    /// Game-wide values (score, lives, keys...) that carry over when `goto` changes level.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub game: BTreeMap<String, Value>,
+    #[serde(skip)]
+    pub mailbox: VecDeque<Message>,
+    /// Set by `goto(level)`; the switch happens at the end of the tick.
+    #[serde(skip)]
+    pub goto: Option<String>,
+    /// This level's name (its folder name), set when loaded.
+    #[serde(skip)]
+    pub level: String,
+    /// True while a tick is running (so timers set by scripts and by commands count the same).
+    #[serde(skip)]
+    pub in_tick: bool,
     #[serde(skip)]
     pub input: Input,
     /// Pairs of entities overlapping at the end of the last tick (for touch events).
@@ -354,6 +446,7 @@ impl World {
             }
         }
         w.fix_ids();
+        w.level = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         Ok(w)
     }
 

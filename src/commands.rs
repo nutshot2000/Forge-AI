@@ -108,6 +108,8 @@ pub const COMMANDS: &[Cmd] = &[
         opt("slide", "number", "pitch change per second, Hz (negative falls)"), opt("dur", "number", "seconds"), opt("vol", "number", "0..1"),
         opt("attack", "number", "fade-in seconds"), opt("vibrato", "number", "depth, Hz"), opt("vibrato_rate", "number", "speed, Hz"),
         opt("arp", "array", "semitone steps, e.g. [0, 4, 7]"), opt("arp_speed", "number", "seconds per step"), opt("delete", "bool", "remove it")] },
+    Cmd { name: "goto", group: "files", desc: "Switch to another level (a world folder next to this one), like goto_level() in a script. Game-wide values (game()/set_game()) carry over.", args: &[
+        req("level", "string", "level (world folder) name"), opt("keep_game", "bool", "carry game-wide values over (default true)")] },
     Cmd { name: "export_game", group: "files", desc: "Export the game as one self-contained .html file anyone can play in a browser.", args: &[
         opt("title", "string", "game title (default: the world's name)")] },
     Cmd { name: "undo", group: "run", desc: "Undo the last change (the user's or yours).", args: &[] },
@@ -256,7 +258,12 @@ pub const SCRIPT_API: &str = r#"{
   "hud": "hud(key, text) shows text over the game; hud_clear()",
   "sound": "sfx(name) plays a sound defined with the sound command",
   "animation": "sprites may have frames + fps (they loop). An entity prop anims: {idle, run, jump, fall, climb} picks the sprite from its movement automatically",
-  "world": "now() rand(n) rand_float() emit(kind[,data]) state(name[,default]) set_state(name,val) print(x)",
+  "world": "now() rand(n) rand_float() emit(kind[,data]) state(name[,default]) set_state(name,val) print(x) prop(id,key,default)",
+  "timers": "after(me,ticks,name[,data]) once, every(me,ticks,name[,data]) repeating -> calls fn on_timer(me, name, data) in the entity's script; me = -1 for world timers -> fn on_timer(name, data) in rules. cancel_timer(me,name)",
+  "tweens": "tween(id, key, to, ticks[, ease]) smoothly changes x, y, alpha, scale, angle or any number prop. ease: linear | in | out | inout (default) | bounce",
+  "messages": "send(id, msg[, data]) and broadcast(msg[, data]) -> fn on_message(me, msg, data) in the receiver's script, delivered the same tick",
+  "levels": "goto_level(name) switches to another world folder at the end of the tick (level() = current name). game(name[,default]) / set_game(name,val) are game-wide values that carry across levels (score, lives, keys)",
+  "screens": "show_screen(title[, text[, prompt]]) shows a full-screen overlay (title/pause/game over), hide_screen(), screen_shown()",
   "hooks": "entity scripts define fn tick(me) and optionally fn on_touch(me, other) (called once when two entities start overlapping; other is a map). A script named 'rules' may define fn rules(). Order each tick: tick scripts -> physics -> on_touch -> rules -> camera",
   "units": "positions are the top-left of the entity box, in tiles (1.0 = one tile); grid games use whole numbers",
   "look": "entities draw as their sprite (prop 'sprite'), else a colored square with 'glyph' and 'color'; 'tags' is an array prop"

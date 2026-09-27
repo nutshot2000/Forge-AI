@@ -187,6 +187,7 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "physics" => format!("physics {}", clip(&c.to_string())),
         "camera" => format!("camera {}", clip(&c.to_string())),
         "background" => "change background".into(),
+        "goto" => format!("go to level '{}'", s("level")),
         "sound" if c.as_object().is_some_and(|m| m.len() > 2) => format!("sound '{}'", s("name")),
         "export_game" => "export playable game".into(),
         "create_world" => format!("create world '{}'", s("name")),
@@ -324,7 +325,7 @@ fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
         "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
-        | "create_world" | "physics" | "camera" | "background" => true,
+        | "create_world" | "physics" | "camera" | "background" | "goto" => true,
         "sound" => has("preset") || c.as_object().is_some_and(|m| m.len() > 2) || has("delete"),
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
@@ -377,6 +378,7 @@ impl App {
         self.dirty = false;
         self.autosave_pending = false;
         self.recovery = find_recovery(&p);
+        self.sim.level_dir = p.parent().map(|d| d.to_path_buf());
         if self.autosave_enabled {
             remember_last_world(&p);
         }
@@ -443,6 +445,19 @@ impl App {
         if self.autosave_pending {
             let _ = self.write_autosave();
         }
+    }
+
+    /// Call after running ticks: follows a `goto` to the new level's folder.
+    pub fn after_ticks(&mut self) {
+        let Some(name) = self.sim.level_changed.take() else { return };
+        if let Some(dir) = self.sim.level_dir.clone() {
+            self.path = Some(dir.join(&name));
+        }
+        self.tps = self.sim.world.borrow().tick_rate;
+        self.ui.selected = None;
+        self.ui.cell = None;
+        self.ui.rev += 1;
+        self.last_look = Some(self.sim.world.borrow().clone());
     }
 
     /// Seconds since the editor last polled, or None if it never has.
@@ -599,6 +614,11 @@ impl App {
             "camera": w.camera,
             "background": w.background,
             "sounds": w.sounds.keys().collect::<Vec<_>>(),
+            "level": w.level,
+            "game": w.game,
+            "screen": w.screen,
+            "timers": w.timers,
+            "tweens": w.tweens.len(),
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
@@ -811,7 +831,10 @@ impl App {
                 let start = self.sim.world.borrow().event_seq;
                 let t0 = Instant::now();
                 let inputs = input_timeline(c)?;
+                let level_before = self.sim.world.borrow().level.clone();
                 let (ran, hit) = self.sim.step(ticks, arg_str(c, "until"), inputs.as_ref())?;
+                self.after_ticks();
+                let level_now = self.sim.world.borrow().level.clone();
                 let ms = t0.elapsed().as_secs_f64() * 1000.0;
                 let evs = self.sim.events_since(start);
                 Ok(json!({
@@ -820,6 +843,8 @@ impl App {
                     "until_hit": hit,
                     "ms": (ms * 10.0).round() / 10.0,
                     "hud": self.sim.world.borrow().hud,
+                    "screen": self.sim.world.borrow().screen,
+                    "level": if level_now != level_before { json!({ "changed": [level_before, level_now] }) } else { json!(level_now) },
                     "events": summarize(&evs, c, 20),
                 }))
             }
@@ -1175,19 +1200,34 @@ impl App {
                 w.sounds.insert(name.into(), snd.clone());
                 Ok(json!({ "name": name, "sound": snd }))
             }
+            "goto" => {
+                let name = need_str(c, "level")?;
+                let mut next = self.sim.load_level(name)?;
+                let game = self.sim.world.borrow().game.clone();
+                if c.get("keep_game") != Some(&json!(false)) {
+                    next.game.extend(game);
+                }
+                next.level = name.to_string();
+                self.sim.replace_world(next);
+                self.sim.level_changed = Some(name.to_string());
+                self.after_ticks();
+                Ok(self.state())
+            }
             "export_game" => {
                 let title = arg_str(c, "title")
                     .map(String::from)
                     .or_else(|| self.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()))
                     .unwrap_or_else(|| "Forge game".into());
                 let dir = crate::viewer::EXPORTS_DIR.get().cloned().unwrap_or_else(|| PathBuf::from("exports"));
-                let file = crate::export::export(&self.sim.world.borrow(), &title, &dir)?;
+                let levels = crate::export::linked_levels(&self.sim);
+                let file = crate::export::export(&self.sim.world.borrow(), &levels, &title, &dir)?;
                 let name = file.file_name().unwrap().to_string_lossy().into_owned();
                 let size = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
                 Ok(json!({
                     "file": file.display().to_string(),
                     "size_kb": size / 1024,
                     "url": self.editor_url().map(|u| format!("{u}/exports/{}", name.replace(' ', "%20"))),
+                    "levels": levels.keys().collect::<Vec<_>>(),
                     "note": "one self-contained .html file: double-click to play, or send it to anyone",
                 }))
             }

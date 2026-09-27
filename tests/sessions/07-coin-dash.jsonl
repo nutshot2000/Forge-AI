@@ -1,5 +1,5 @@
 # The Coin Dash demo: loads, plays with input, snapshots/diff/restore, playtests.
-{"cmd":"load","path":"worlds/coin-dash","expect":{"ok":true,"kinds":{"coin":10,"hero":1,"slime":3}}}
+{"cmd":"load","path":"tests/fixtures/coin-dash","expect":{"ok":true,"kinds":{"coin":10,"hero":1,"slime":3}}}
 {"cmd":"snapshot","name":"s0","expect":{"tick":0}}
 {"cmd":"input","down":"right"}
 {"cmd":"step","ticks":3}

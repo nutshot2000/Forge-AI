@@ -183,6 +183,28 @@
       R.drawEntity(g, e, dx, dy, v);
     }
     if (opts.hud !== false) R.drawHud(g, frame.hud, v, opts.hudTop ?? 8);
+    if (frame.screen && opts.screen !== false) R.drawScreen(g, frame.screen, v, frame.tick || 0);
+  };
+
+  // Title / pause / game over overlays set by show_screen().
+  R.drawScreen = (g, sc, v, tick) => {
+    const W = v.cw, H = v.ch;
+    g.fillStyle = '#05060acc'; g.fillRect(0, 0, W, H);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const big = Math.round(Math.max(22, Math.min(64, W / 14)));
+    g.font = `bold ${big}px ui-monospace, Consolas, monospace`;
+    g.fillStyle = '#000'; g.fillText(sc.title, W / 2 + 3, H * 0.4 + 3);
+    g.fillStyle = '#fff'; g.fillText(sc.title, W / 2, H * 0.4);
+    if (sc.text) {
+      const fs = Math.round(Math.max(13, big * 0.36));
+      g.font = `${fs}px system-ui, sans-serif`; g.fillStyle = '#d9dde8';
+      String(sc.text).split('\n').forEach((line, i) => g.fillText(line, W / 2, H * 0.4 + big * 0.9 + i * fs * 1.4));
+    }
+    if (sc.prompt && Math.floor(tick / 20) % 2 === 0) {
+      const fs = Math.round(Math.max(13, big * 0.34));
+      g.font = `bold ${fs}px ui-monospace, Consolas, monospace`; g.fillStyle = '#f5c542';
+      g.fillText(sc.prompt, W / 2, H * 0.72);
+    }
   };
 
   R.drawEntity = (g, e, x, y, v, alpha = 1) => {

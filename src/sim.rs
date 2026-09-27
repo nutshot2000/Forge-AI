@@ -4,7 +4,7 @@
 //! (`fn on_touch(me, other)`) → the `rules` script (`fn rules()`) → camera.
 
 use crate::physics;
-use crate::world::{num, Entity, Event, World};
+use crate::world::{num, Entity, Event, Message, Screen, Timer, Tween, World};
 use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, Map as RMap, Scope, AST};
 use serde_json::{json, Value};
 use std::cell::RefCell;
@@ -303,6 +303,104 @@ fn build_engine(w: &W) -> Engine {
     // Sounds play in the editor and in exported games (they arrive as "sfx" events).
     reg!(e, w, "sfx", move |name: &str| { w.borrow_mut().emit("sfx", json!({ "name": name })) });
 
+    // --- props with defaults ---
+    reg!(e, w, "prop", move |id: i64, key: &str, default: Dynamic| -> Dynamic {
+        let w = w.borrow();
+        match w.entities.get(&(id as u64)) {
+            Some(en) => match key {
+                "x" => Dynamic::from(en.x),
+                "y" => Dynamic::from(en.y),
+                "kind" => Dynamic::from(en.kind.clone()),
+                _ => en.props.get(key).filter(|v| !v.is_null()).map_or(default, to_dyn),
+            },
+            None => default,
+        }
+    });
+
+    // --- timers & tweens ---
+    for (fname, repeat, with_data) in [("after", false, false), ("after", false, true), ("every", true, false), ("every", true, true)] {
+        let w = w.clone();
+        let make = move |me: i64, ticks: i64, name: &str, data: Dynamic| -> RR<()> {
+            if ticks < 1 {
+                return Err(format!("timer '{name}': ticks must be at least 1").into());
+            }
+            let mut w = w.borrow_mut();
+            let entity = (me >= 0).then_some(me as u64);
+            // "after N ticks" fires on the Nth tick from now, whether set by a script
+            // during a tick or by a command between ticks.
+            let due = w.tick + ticks as u64 - u64::from(!w.in_tick);
+            w.timers.push(Timer { entity, name: name.into(), due, every: if repeat { ticks as u64 } else { 0 }, data: to_json(&data) });
+            Ok(())
+        };
+        if with_data {
+            e.register_fn(fname, move |me: i64, ticks: i64, name: &str, data: Dynamic| make(me, ticks, name, data));
+        } else {
+            e.register_fn(fname, move |me: i64, ticks: i64, name: &str| make(me, ticks, name, Dynamic::UNIT));
+        }
+    }
+    reg!(e, w, "cancel_timer", move |me: i64, name: &str| -> i64 {
+        let mut w = w.borrow_mut();
+        let before = w.timers.len();
+        let entity = (me >= 0).then_some(me as u64);
+        w.timers.retain(|t| !(t.entity == entity && t.name == name));
+        (before - w.timers.len()) as i64
+    });
+    for with_ease in [false, true] {
+        let w = w.clone();
+        let make = move |id: i64, key: &str, to: Dynamic, ticks: i64, ease: &str| -> RR<()> {
+            let mut w = w.borrow_mut();
+            let tick = w.tick;
+            let en = w.entities.get(&(id as u64)).ok_or_else(|| format!("tween: no entity {id}"))?;
+            let from = match key {
+                "x" => en.x,
+                "y" => en.y,
+                _ => en.f(key, if key == "alpha" || key == "scale" { 1.0 } else { 0.0 }),
+            };
+            let to = n(&to)?;
+            w.tweens.retain(|t| !(t.id == id as u64 && t.key == key));
+            w.tweens.push(Tween { id: id as u64, key: key.into(), from, to, start: tick, dur: ticks.max(1) as u64, ease: ease.into() });
+            Ok(())
+        };
+        if with_ease {
+            e.register_fn("tween", move |id: i64, key: &str, to: Dynamic, ticks: i64, ease: &str| make(id, key, to, ticks, ease));
+        } else {
+            e.register_fn("tween", move |id: i64, key: &str, to: Dynamic, ticks: i64| make(id, key, to, ticks, "inout"));
+        }
+    }
+
+    // --- messages ---
+    reg!(e, w, "send", move |to: i64, msg: &str| { w.borrow_mut().mailbox.push_back(Message { to: to.max(0) as u64, msg: msg.into(), data: Value::Null }) });
+    reg!(e, w, "send", move |to: i64, msg: &str, data: Dynamic| {
+        w.borrow_mut().mailbox.push_back(Message { to: to.max(0) as u64, msg: msg.into(), data: to_json(&data) })
+    });
+    reg!(e, w, "broadcast", move |msg: &str| { w.borrow_mut().mailbox.push_back(Message { to: 0, msg: msg.into(), data: Value::Null }) });
+    reg!(e, w, "broadcast", move |msg: &str, data: Dynamic| {
+        w.borrow_mut().mailbox.push_back(Message { to: 0, msg: msg.into(), data: to_json(&data) })
+    });
+
+    // --- screens, levels, game-wide values ---
+    reg!(e, w, "show_screen", move |title: &str| { w.borrow_mut().screen = Some(Screen { title: title.into(), text: String::new(), prompt: String::new() }) });
+    reg!(e, w, "show_screen", move |title: &str, text: &str| {
+        w.borrow_mut().screen = Some(Screen { title: title.into(), text: text.into(), prompt: String::new() })
+    });
+    reg!(e, w, "show_screen", move |title: &str, text: &str, prompt: &str| {
+        w.borrow_mut().screen = Some(Screen { title: title.into(), text: text.into(), prompt: prompt.into() })
+    });
+    reg!(e, w, "hide_screen", move || { w.borrow_mut().screen = None });
+    reg!(e, w, "screen_shown", move || -> bool { w.borrow().screen.is_some() });
+    reg!(e, w, "goto_level", move |level: &str| { w.borrow_mut().goto = Some(level.to_string()) });
+    reg!(e, w, "level", move || -> String { w.borrow().level.clone() });
+    reg!(e, w, "game", move |name: &str| -> Dynamic { w.borrow().game.get(name).map_or(Dynamic::UNIT, to_dyn) });
+    reg!(e, w, "game", move |name: &str, default: Dynamic| -> Dynamic { w.borrow().game.get(name).map_or(default, to_dyn) });
+    reg!(e, w, "set_game", move |name: &str, v: Dynamic| {
+        let mut w = w.borrow_mut();
+        if v.is_unit() {
+            w.game.remove(name);
+        } else {
+            w.game.insert(name.to_string(), to_json(&v));
+        }
+    });
+
     // --- world state, events, randomness ---
     reg!(e, w, "now", move || -> i64 { w.borrow().tick as i64 });
     reg!(e, w, "rand", move |n: i64| -> i64 {
@@ -340,6 +438,12 @@ pub struct Sim {
     /// Where each tick is recorded for the editor; paused during trials and previews.
     pub recorder: Option<Recorder>,
     pub recording: bool,
+    /// Where `goto(level)` finds levels: a folder of world folders (native) ...
+    pub level_dir: Option<std::path::PathBuf>,
+    /// ... or bundled worlds (the web player).
+    pub levels: BTreeMap<String, World>,
+    /// Set when a `goto` switched level, so the host can follow (e.g. update its save path).
+    pub level_changed: Option<String>,
 }
 
 impl Sim {
@@ -356,6 +460,9 @@ impl Sim {
             repl: Scope::new(),
             recorder: None,
             recording: true,
+            level_dir: None,
+            levels: BTreeMap::new(),
+            level_changed: None,
         };
         sim.recompile();
         sim
@@ -433,6 +540,7 @@ impl Sim {
 
     pub fn run_tick(&mut self) {
         let start = self.world.borrow().event_seq;
+        self.world.borrow_mut().in_tick = true;
 
         // 1. Entity scripts.
         let jobs: Vec<(u64, String)> =
@@ -447,6 +555,8 @@ impl Sim {
                 self.call(script, "tick", (*id as i64,), Some(*id));
             }
         }
+
+        self.deliver_messages();
 
         // 2. Physics.
         physics::step(&mut self.world.borrow_mut());
@@ -474,10 +584,14 @@ impl Sim {
             }
         }
 
-        // 4. Rules.
+        // 4. Timers and tweens, then rules.
+        self.fire_timers();
+        self.apply_tweens();
+        self.deliver_messages();
         if self.has_fn("rules", "rules", 0) {
             self.call("rules", "rules", (), None);
         }
+        self.deliver_messages();
 
         // 5. Camera, clock, input.
         {
@@ -485,10 +599,116 @@ impl Sim {
             physics::update_camera(&mut w);
             w.tick += 1;
             w.end_tick_input();
+            w.in_tick = false;
         }
+        let switched = self.switch_level();
         if self.recording && self.recorder.is_some() {
             let evs = self.events_since(start).into_iter().take(20).map(|e| json!({ "kind": e.kind, "data": e.data })).collect();
-            self.record(None, evs, false);
+            self.record(None, evs, switched);
+        }
+    }
+
+    /// Delivers queued messages to `on_message(me, msg, data)` (messages sent while
+    /// delivering are delivered too, up to a limit so ping-pong can't hang the game).
+    fn deliver_messages(&mut self) {
+        for _ in 0..1000 {
+            let Some(m) = self.world.borrow_mut().mailbox.pop_front() else { return };
+            let targets: Vec<(u64, String)> = {
+                let w = self.world.borrow();
+                w.entities
+                    .iter()
+                    .filter(|(id, _)| m.to == 0 || **id == m.to)
+                    .filter_map(|(id, e)| e.script.clone().map(|s| (*id, s)))
+                    .filter(|(_, s)| self.has_fn(s, "on_message", 3))
+                    .collect()
+            };
+            for (id, script) in targets {
+                if self.world.borrow().entities.contains_key(&id) {
+                    self.call(&script, "on_message", (id as i64, m.msg.clone(), to_dyn(&m.data)), Some(id));
+                }
+            }
+        }
+        self.world.borrow_mut().mailbox.clear();
+        self.report(json!({ "script": "messages", "error": "more than 1000 messages in one tick; stopped delivering (is something sending in a loop?)" }));
+    }
+
+    fn fire_timers(&mut self) {
+        let now = self.world.borrow().tick;
+        let due: Vec<Timer> = {
+            let mut w = self.world.borrow_mut();
+            let (due, rest): (Vec<Timer>, Vec<Timer>) = std::mem::take(&mut w.timers).into_iter().partition(|t| t.due <= now);
+            w.timers = rest;
+            for t in due.iter().filter(|t| t.every > 0) {
+                // From the previous due time, so repeating timers never drift.
+                w.timers.push(Timer { due: t.due + t.every, ..t.clone() });
+            }
+            due
+        };
+        for t in due {
+            match t.entity {
+                Some(id) => {
+                    let script = self.world.borrow().entities.get(&id).and_then(|e| e.script.clone());
+                    match script {
+                        Some(s) if self.has_fn(&s, "on_timer", 3) => self.call(&s, "on_timer", (id as i64, t.name.clone(), to_dyn(&t.data)), Some(id)),
+                        Some(_) => {}
+                        // The entity is gone: its repeating timers go too.
+                        None => self.world.borrow_mut().timers.retain(|x| x.entity != Some(id)),
+                    }
+                }
+                None if self.has_fn("rules", "on_timer", 2) => self.call("rules", "on_timer", (t.name.clone(), to_dyn(&t.data)), None),
+                None => {}
+            }
+        }
+    }
+
+    fn apply_tweens(&mut self) {
+        let mut w = self.world.borrow_mut();
+        let tick = w.tick;
+        let tweens = std::mem::take(&mut w.tweens);
+        let mut keep = vec![];
+        for tw in tweens {
+            let (v, done) = tw.value_at(tick);
+            let Some(e) = w.entities.get_mut(&tw.id) else { continue };
+            match tw.key.as_str() {
+                "x" => e.x = v,
+                "y" => e.y = v,
+                k => {
+                    e.props.insert(k.to_string(), json!(v));
+                }
+            }
+            if !done {
+                keep.push(tw);
+            }
+        }
+        w.tweens = keep;
+    }
+
+    /// Finds a level by name: bundled levels first, then `level_dir/<name>`.
+    pub fn load_level(&self, name: &str) -> Result<World, String> {
+        if let Some(w) = self.levels.get(name) {
+            return Ok(w.clone());
+        }
+        let dir = self.level_dir.as_ref().ok_or(format!("goto('{name}'): this game has no other levels"))?;
+        World::load_dir(&dir.join(name)).map_err(|e| format!("goto('{name}'): {e}"))
+    }
+
+    /// Performs a pending `goto`: the next level starts, keeping game-wide values.
+    fn switch_level(&mut self) -> bool {
+        let Some(name) = self.world.borrow_mut().goto.take() else { return false };
+        match self.load_level(&name) {
+            Ok(mut next) => {
+                let game = self.world.borrow().game.clone();
+                next.game.extend(game);
+                next.level = name.clone();
+                next.emit("level_start", json!({ "level": name }));
+                self.replace_world(next);
+                self.level_changed = Some(name);
+                true
+            }
+            Err(e) => {
+                self.report(json!({ "script": "goto", "error": e }));
+                false
+            }
         }
     }
 
@@ -598,6 +818,7 @@ impl Sim {
         })();
         self.replace_world(saved);
         self.recording = true;
+        self.level_changed = None;
         let out = result?;
 
         let nums: Vec<f64> = out.iter().filter_map(|r| r["metric"].as_f64()).collect();
@@ -633,6 +854,8 @@ pub fn frame_of(w: &World) -> Value {
         },
         "tile_size": w.tile_size,
         "tick_rate": w.tick_rate,
+        "screen": w.screen,
+        "level": w.level,
     })
 }
 
