@@ -76,12 +76,12 @@ From grid-only to proper 2D, keeping grid mode for grid games.
 
 ## Phase 3: Art, animation and sound (all agent-writable text)
 
-- ☐ **P3.1 Animation:** sprites with multiple frames and fps; named animations (`idle`, `walk`, `jump`, `hurt`); auto-switch from movement state.
+- ☑ **P3.1 Animation:** sprites with multiple frames and fps; named animations (`idle`, `walk`, `jump`, `hurt`); auto-switch from movement state.
 - ☐ **P3.2 Pixel editor** in the editor: pencil, fill, mirror, palette, frames timeline, onion skin, plus "ask the agent to draw/edit this".
 - ☐ **P3.3 Sprite sheets:** import a sheet image and slice it into frames; export sheets.
 - ☐ **P3.4 Tilesets and autotiling:** walls pick the right edge/corner piece automatically; 16×16/32×32 tile sizes.
 - ☐ **P3.5 Particles:** dust, sparks, explosions, rain, defined as short text presets (`particles("explosion", x, y)`).
-- ☐ **P3.6 Sound effects:** synthesized from parameters (jsfxr-style), so the agent can design sounds as text; `sfx("jump")`; import `.wav`/`.ogg`.
+- ◐ **P3.6 Sound effects:** synthesized from parameters (jsfxr-style), so the agent can design sounds as text; `sfx("jump")`; import `.wav`/`.ogg`. (Done: `sound` recipes + 9 presets, `sfx()`, mute button, plays in exported games. To do: importing audio files.)
 - ☐ **P3.7 Music:** a tiny text tracker format the agent can compose in; loops, per-level music, fade.
 - ☐ **P3.8 Text and fonts:** pixel fonts, in-world text, floating damage numbers.
 - ☐ **P3.9 Lighting and effects (stretch):** darkness, light radius, simple shaders (flash, outline, palette swap).

@@ -83,6 +83,11 @@
       "x": 2,
       "y": 13.1,
       "script": "player",
+      "anims": {
+        "idle": "knight",
+        "run": "knight_run",
+        "jump": "knight_jump"
+      },
       "buffer": 0,
       "coyote": 0,
       "flip": "auto",
@@ -593,6 +598,38 @@
         "yoyyyyoy",
         ".yooooy.",
         "..yyyy.."
+      ],
+      "frames": [
+        [
+          "...yy...",
+          "..yowy..",
+          "..yoyy..",
+          "..yoyy..",
+          "..yoyy..",
+          "..yoyy..",
+          "..yooy..",
+          "...yy..."
+        ],
+        [
+          "...yy...",
+          "...wy...",
+          "...yy...",
+          "...yy...",
+          "...yy...",
+          "...yy...",
+          "...oy...",
+          "...yy..."
+        ],
+        [
+          "...yy...",
+          "..ywoy..",
+          "..yyoy..",
+          "..yyoy..",
+          "..yyoy..",
+          "..yyoy..",
+          "..yooy..",
+          "...yy..."
+        ]
       ]
     },
     "dirt": {
@@ -627,7 +664,20 @@
         "p.......",
         "p.......",
         "p......."
-      ]
+      ],
+      "frames": [
+        [
+          "prrr....",
+          "prrwrrr.",
+          "prrrrr..",
+          "prrrrr..",
+          "p.......",
+          "p.......",
+          "p.......",
+          "p......."
+        ]
+      ],
+      "fps": 3.0
     },
     "grass": {
       "palette": {
@@ -666,6 +716,59 @@
         "..b..b..",
         "..l..l.."
       ]
+    },
+    "knight_jump": {
+      "palette": {
+        "b": "#4a78e0",
+        "d": "#2b3f7a",
+        "h": "#d7dee8",
+        "l": "#3a2a1a",
+        "s": "#f5c542",
+        "v": "#1d2433"
+      },
+      "pixels": [
+        "..hhhh..",
+        ".hhhhhh.",
+        ".hvvvvh.",
+        ".hhhhhh.",
+        "sbbbbbbs",
+        "..bddb..",
+        ".bb..bb.",
+        ".l....l."
+      ]
+    },
+    "knight_run": {
+      "palette": {
+        "b": "#4a78e0",
+        "d": "#2b3f7a",
+        "h": "#d7dee8",
+        "l": "#3a2a1a",
+        "s": "#f5c542",
+        "v": "#1d2433"
+      },
+      "pixels": [
+        "..hhhh..",
+        ".hhhhhh.",
+        ".hvvvvh.",
+        ".hhhhhh.",
+        "sbbbbbb.",
+        "s.bddb..",
+        ".b....b.",
+        ".l....l."
+      ],
+      "frames": [
+        [
+          "..hhhh..",
+          ".hhhhhh.",
+          ".hvvvvh.",
+          ".hhhhhh.",
+          "sbbbbbb.",
+          "s.bddb..",
+          "...bb...",
+          "...ll..."
+        ]
+      ],
+      "fps": 10.0
     },
     "ladder": {
       "palette": {
@@ -731,7 +834,20 @@
         "gggggggg",
         "gddddddg",
         ".gggggg."
-      ]
+      ],
+      "frames": [
+        [
+          "........",
+          "........",
+          "........",
+          "..gggg..",
+          ".gwggwg.",
+          "ggkggkgg",
+          "gddddddg",
+          "gggggggg"
+        ]
+      ],
+      "fps": 4.0
     },
     "spikes": {
       "palette": {
@@ -748,6 +864,92 @@
         ".sdd.sdd",
         "sddssdds"
       ]
+    }
+  },
+  "sounds": {
+    "checkpoint": {
+      "wave": "square",
+      "freq": 330.0,
+      "slide": 0.0,
+      "dur": 0.36,
+      "vol": 0.22,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp": [
+        0.0,
+        4.0,
+        7.0,
+        12.0
+      ],
+      "arp_speed": 0.06
+    },
+    "coin": {
+      "wave": "square",
+      "freq": 988.0,
+      "slide": 0.0,
+      "dur": 0.25,
+      "vol": 0.2,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp": [
+        0.0,
+        5.0
+      ],
+      "arp_speed": 0.07
+    },
+    "hurt": {
+      "wave": "saw",
+      "freq": 330.0,
+      "slide": -900.0,
+      "dur": 0.22,
+      "vol": 0.3,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp_speed": 0.06
+    },
+    "jump": {
+      "wave": "square",
+      "freq": 260.0,
+      "slide": 900.0,
+      "dur": 0.18,
+      "vol": 0.22,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp_speed": 0.06
+    },
+    "stomp": {
+      "wave": "square",
+      "freq": 200.0,
+      "slide": -500.0,
+      "dur": 0.12,
+      "vol": 0.3,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp_speed": 0.06
+    },
+    "win": {
+      "wave": "triangle",
+      "freq": 523.0,
+      "slide": 0.0,
+      "dur": 0.7,
+      "vol": 0.3,
+      "attack": 0.005,
+      "vibrato": 0.0,
+      "vibrato_rate": 0.0,
+      "arp": [
+        0.0,
+        4.0,
+        7.0,
+        12.0,
+        7.0,
+        12.0
+      ],
+      "arp_speed": 0.1
     }
   },
   "prefabs": {
@@ -788,6 +990,11 @@
       "z": 1
     },
     "player": {
+      "anims": {
+        "idle": "knight",
+        "run": "knight_run",
+        "jump": "knight_jump"
+      },
       "buffer": 0,
       "coyote": 0,
       "flip": "auto",

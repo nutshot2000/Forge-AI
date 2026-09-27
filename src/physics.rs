@@ -376,7 +376,7 @@ pub fn frame_entities(w: &World) -> Vec<Value> {
         .iter()
         .map(|(id, e)| {
             let mut extra = BTreeMap::new();
-            for k in ["w", "h", "flip", "angle", "alpha", "scale", "z", "vx", "vy"] {
+            for k in ["w", "h", "flip", "angle", "alpha", "scale", "z", "vx", "vy", "anims", "on_ground", "on_ladder"] {
                 if let Some(v) = e.props.get(k) {
                     if !v.is_null() {
                         extra.insert(k, v.clone());

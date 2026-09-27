@@ -187,6 +187,7 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "physics" => format!("physics {}", clip(&c.to_string())),
         "camera" => format!("camera {}", clip(&c.to_string())),
         "background" => "change background".into(),
+        "sound" if c.as_object().is_some_and(|m| m.len() > 2) => format!("sound '{}'", s("name")),
         "export_game" => "export playable game".into(),
         "create_world" => format!("create world '{}'", s("name")),
         "duplicate_world" => format!("duplicate world '{}' as '{}'", s("name"), s("to")),
@@ -281,6 +282,26 @@ fn remember_last_world(p: &std::path::Path) {
     }
 }
 
+pub const SOUND_PRESETS: &[&str] = &["jump", "coin", "hit", "explosion", "powerup", "laser", "blip", "stomp", "win"];
+
+/// Ready-made sound recipes, a starting point to tweak.
+fn sound_preset(name: &str) -> Option<crate::world::Sound> {
+    use crate::world::Sound;
+    let s = |wave: &str, freq: f64, slide: f64, dur: f64, vol: f64| Sound { wave: wave.into(), freq, slide, dur, vol, ..Sound::default() };
+    Some(match name {
+        "jump" => s("square", 260.0, 900.0, 0.18, 0.22),
+        "coin" => Sound { arp: vec![0.0, 5.0], arp_speed: 0.07, ..s("square", 988.0, 0.0, 0.25, 0.2) },
+        "hit" => s("saw", 330.0, -900.0, 0.22, 0.3),
+        "explosion" => s("noise", 120.0, -60.0, 0.6, 0.45),
+        "powerup" => Sound { arp: vec![0.0, 4.0, 7.0, 12.0], arp_speed: 0.06, ..s("square", 330.0, 0.0, 0.36, 0.22) },
+        "laser" => s("saw", 1400.0, -4000.0, 0.16, 0.2),
+        "blip" => s("sine", 660.0, 0.0, 0.07, 0.3),
+        "stomp" => s("square", 200.0, -500.0, 0.12, 0.3),
+        "win" => Sound { arp: vec![0.0, 4.0, 7.0, 12.0, 7.0, 12.0], arp_speed: 0.1, ..s("triangle", 523.0, 0.0, 0.7, 0.3) },
+        _ => return None,
+    })
+}
+
 /// `inputs` for step/trials: {"0": ["right"], "30": ["right", "space"], "45": []}.
 fn input_timeline(c: &Value) -> Result<Option<crate::sim::InputTimeline>, String> {
     let Some(obj) = c.get("inputs") else { return Ok(None) };
@@ -304,6 +325,7 @@ fn mutates(c: &Value, cmd: &str) -> bool {
     match cmd {
         "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
         | "create_world" | "physics" | "camera" | "background" => true,
+        "sound" => has("preset") || c.as_object().is_some_and(|m| m.len() > 2) || has("delete"),
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
         "prefab" => has("props") || has("delete"),
@@ -481,6 +503,7 @@ impl App {
             "physics": w.physics,
             "camera": w.camera,
             "background": w.background,
+            "sounds": w.sounds,
             "unsaved": self.dirty,
             "recovery": self.recovery,
             "notices": self.notices,
@@ -575,6 +598,7 @@ impl App {
             "physics": w.physics,
             "camera": w.camera,
             "background": w.background,
+            "sounds": w.sounds.keys().collect::<Vec<_>>(),
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
@@ -996,9 +1020,30 @@ impl App {
                 if !missing.is_empty() {
                     return Err(format!("palette has no color for {missing:?}"));
                 }
+                let frames: Vec<Vec<String>> = match c.get("frames") {
+                    Some(Value::Array(fs)) => fs
+                        .iter()
+                        .map(|f| f.as_array().map(|rows| rows.iter().filter_map(Value::as_str).map(String::from).collect()).ok_or("frames: each frame is an array of rows"))
+                        .collect::<Result<_, _>>()?,
+                    Some(_) => return Err("frames must be an array of frames (each an array of rows)".into()),
+                    None => vec![],
+                };
+                let missing_in_frames: Vec<char> = frames
+                    .iter()
+                    .flatten()
+                    .flat_map(|r| r.chars())
+                    .filter(|ch| *ch != '.' && *ch != ' ' && !palette.contains_key(&ch.to_string()))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                if !missing_in_frames.is_empty() {
+                    return Err(format!("frames: palette has no color for {missing_in_frames:?}"));
+                }
+                let fps = c["fps"].as_f64().unwrap_or(8.0).clamp(0.5, 60.0);
                 let size = [pixels.iter().map(|r| r.chars().count()).max().unwrap_or(0), pixels.len()];
-                w.sprites.insert(name.into(), Sprite { palette, pixels });
-                Ok(json!({ "name": name, "size": size }))
+                let count = 1 + frames.len();
+                w.sprites.insert(name.into(), Sprite { palette, pixels, frames, fps });
+                Ok(json!({ "name": name, "size": size, "frames": count }))
             }
             "prefab" => {
                 let mut w = self.sim.world.borrow_mut();
@@ -1096,6 +1141,39 @@ impl App {
                     w.background.layers = layers;
                 }
                 Ok(json!({ "background": w.background }))
+            }
+            "sound" => {
+                let mut w = self.sim.world.borrow_mut();
+                let Some(name) = arg_str(c, "name") else {
+                    return Ok(json!({ "sounds": w.sounds, "presets": SOUND_PRESETS }));
+                };
+                if c.get("delete") == Some(&json!(true)) {
+                    w.sounds.remove(name).ok_or(format!("no sound '{name}'"))?;
+                    return Ok(json!({ "deleted": name }));
+                }
+                let mut snd = match arg_str(c, "preset") {
+                    Some(p) => sound_preset(p).ok_or(format!("unknown preset '{p}' ({})", SOUND_PRESETS.join(" | ")))?,
+                    None => w.sounds.get(name).cloned().unwrap_or_default(),
+                };
+                if let Some(v) = arg_str(c, "wave") {
+                    if !["square", "sine", "triangle", "saw", "noise"].contains(&v) {
+                        return Err(format!("unknown wave '{v}' (square | sine | triangle | saw | noise)"));
+                    }
+                    snd.wave = v.into();
+                }
+                for (k, slot) in [("freq", &mut snd.freq), ("slide", &mut snd.slide), ("dur", &mut snd.dur), ("vol", &mut snd.vol),
+                                  ("attack", &mut snd.attack), ("vibrato", &mut snd.vibrato), ("vibrato_rate", &mut snd.vibrato_rate), ("arp_speed", &mut snd.arp_speed)] {
+                    if let Some(v) = c[k].as_f64() {
+                        *slot = v;
+                    }
+                }
+                if let Some(a) = c["arp"].as_array() {
+                    snd.arp = a.iter().filter_map(Value::as_f64).collect();
+                }
+                snd.dur = snd.dur.clamp(0.01, 5.0);
+                snd.vol = snd.vol.clamp(0.0, 1.0);
+                w.sounds.insert(name.into(), snd.clone());
+                Ok(json!({ "name": name, "sound": snd }))
             }
             "export_game" => {
                 let title = arg_str(c, "title")

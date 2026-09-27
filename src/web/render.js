@@ -4,38 +4,47 @@
 // Coordinates are in tiles; a "view" maps them to screen pixels: sx = (x - ox) * s.
 (function () {
   const R = {};
-  let assets = { sprites: {}, tiles: {}, background: null };
+  let assets = { sprites: {}, tiles: {}, background: null, sounds: {} };
+  let clock = { tick: 0, rate: 8 };
   const spriteCache = new Map();
   const facing = new Map();
 
   R.hue = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; };
   R.colorOf = (kind, c) => c || `hsl(${R.hue(kind)} 68% 62%)`;
-  R.setAssets = (sprites, tiles, background) => {
+  R.setAssets = (sprites, tiles, background, sounds) => {
     const bg = background && ((background.sky || []).length || (background.layers || []).length) ? background : null;
-    assets = { sprites: sprites || {}, tiles: tiles || {}, background: bg };
+    assets = { sprites: sprites || {}, tiles: tiles || {}, background: bg, sounds: sounds || {} };
   };
   R.assets = () => assets;
 
-  R.spriteCanvas = name => {
+  // Which animation frame a sprite is on right now (tied to game ticks, so it's in sync everywhere).
+  R.frameIndex = name => {
+    const sp = assets.sprites[name];
+    if (!sp || !sp.frames || !sp.frames.length) return 0;
+    return Math.floor(clock.tick / (clock.rate || 8) * (sp.fps || 8)) % (sp.frames.length + 1);
+  };
+  R.spriteCanvas = (name, frame = 0) => {
     const sp = assets.sprites[name];
     if (!sp) return null;
-    const key = JSON.stringify(sp);
-    let c = spriteCache.get(name);
+    const pixels = frame > 0 && sp.frames && sp.frames[frame - 1] ? sp.frames[frame - 1] : sp.pixels;
+    const key = JSON.stringify(sp.palette) + JSON.stringify(pixels);
+    const ck = name + '#' + frame;
+    let c = spriteCache.get(ck);
     if (c && c._key === key) return c;
-    const h = sp.pixels.length, w = Math.max(1, ...sp.pixels.map(r => [...r].length));
+    const h = pixels.length, w = Math.max(1, ...pixels.map(r => [...r].length));
     c = document.createElement('canvas'); c.width = w; c.height = h; c._key = key;
     const g = c.getContext('2d');
-    sp.pixels.forEach((row, y) => [...row].forEach((ch, x) => {
+    pixels.forEach((row, y) => [...row].forEach((ch, x) => {
       const col = sp.palette[ch];
       if (col && ch !== '.' && ch !== ' ') { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
     }));
-    spriteCache.set(name, c);
+    spriteCache.set(ck, c);
     return c;
   };
 
   // Draws a sprite to fit inside a box (keeping its shape), centered and standing on the bottom.
-  R.drawSprite = (g, name, x, y, w, h) => {
-    const c = R.spriteCanvas(name);
+  R.drawSprite = (g, name, x, y, w, h, frame) => {
+    const c = R.spriteCanvas(name, frame ?? R.frameIndex(name));
     if (!c) return false;
     const k = Math.min(w / c.width, h / c.height);
     const dw = c.width * k, dh = c.height * k;
@@ -147,6 +156,7 @@
   };
 
   R.drawFrame = (g, frame, rows, v, opts = {}) => {
+    clock = { tick: frame.tick || 0, rate: frame.tick_rate || 8 };
     R.drawBackground(g, v);
     const S = v.s;
     const x0 = Math.max(0, Math.floor(v.ox)), y0 = Math.max(0, Math.floor(v.oy));
@@ -192,7 +202,15 @@
     if (ex.angle) g.rotate(ex.angle * Math.PI / 180);
     const sc = ex.scale ?? 1;
     g.scale(flip ? -sc : sc, sc);
-    if (!(e[6] && R.drawSprite(g, e[6], -w / 2, -h / 2, w, h))) {
+    // anims: pick the sprite from how the entity is moving.
+    let sprite = e[6];
+    const a = ex.anims;
+    if (a && typeof a === 'object') {
+      const air = ex.on_ground === false && !ex.on_ladder;
+      const moving = Math.abs(ex.vx || 0) > 0.3;
+      sprite = (ex.on_ladder && a.climb) || (air && ((ex.vy || 0) < 0 ? a.jump : (a.fall || a.jump))) || (moving && a.run) || a.idle || sprite;
+    }
+    if (!(sprite && R.drawSprite(g, sprite, -w / 2, -h / 2, w, h))) {
       // No sprite: a colored rounded box with the glyph.
       const bw = w * .84, bh = h * .84;
       g.fillStyle = R.colorOf(e[4], e[5]);
@@ -215,6 +233,47 @@
     g.fillStyle = '#fff'; g.textAlign = 'left'; g.textBaseline = 'top';
     lines.forEach((s, i) => g.fillText(s, 17, top + 5 + i * lh));
   };
+
+  // ---- sound: recipes synthesized with Web Audio ----
+  let audio = null, muted = false;
+  R.setMuted = m => { muted = m; };
+  R.unlockAudio = () => {
+    try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); } catch (e) {}
+  };
+  R.playSound = s => {
+    if (muted || !s) return;
+    R.unlockAudio();
+    if (!audio || audio.state !== 'running') return;
+    const t = audio.currentTime, dur = Math.max(0.01, s.dur ?? 0.15), vol = Math.min(1, Math.max(0, s.vol ?? 0.3));
+    const gain = audio.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(vol, t + Math.max(0.001, s.attack ?? 0.005));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    gain.connect(audio.destination);
+    let src;
+    if (s.wave === 'noise') {
+      const n = Math.floor(audio.sampleRate * dur), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+      // Pitch shapes the noise: hold each random value for a while at low "frequencies".
+      const hold = Math.max(1, Math.floor(audio.sampleRate / Math.max(20, (s.freq ?? 440) * 4)));
+      let v = 0;
+      for (let i = 0; i < n; i++) { if (i % hold === 0) v = Math.random() * 2 - 1; d[i] = v; }
+      src = audio.createBufferSource(); src.buffer = buf;
+    } else {
+      src = audio.createOscillator();
+      src.type = s.wave === 'saw' ? 'sawtooth' : (s.wave || 'square');
+      const f0 = Math.max(20, s.freq ?? 440);
+      src.frequency.setValueAtTime(f0, t);
+      if (s.slide) src.frequency.linearRampToValueAtTime(Math.max(20, f0 + s.slide * dur), t + dur);
+      (s.arp || []).forEach((semi, i) => src.frequency.setValueAtTime(f0 * Math.pow(2, semi / 12), t + i * (s.arp_speed ?? 0.06)));
+      if (s.vibrato && s.vibrato_rate) {
+        const lfo = audio.createOscillator(), depth = audio.createGain();
+        lfo.frequency.value = s.vibrato_rate; depth.gain.value = s.vibrato;
+        lfo.connect(depth); depth.connect(src.frequency); lfo.start(t); lfo.stop(t + dur);
+      }
+    }
+    src.connect(gain); src.start(t); src.stop(t + dur + 0.02);
+  };
+  R.playSfx = name => R.playSound(assets.sounds[name]);
 
   // Key names shared with the engine: lowercase, arrows as up/down/left/right, " " as space.
   R.keyName = k => ({ ' ': 'space', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' })[k] || k.toLowerCase();

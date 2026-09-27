@@ -21,6 +21,7 @@ fn tick(me) {
         vy = get(me).vy;
         coyote = 0;
         buffer = 0;
+        sfx("jump");
         emit("jump");
     }
     // Let go early for a short hop.
@@ -52,6 +53,7 @@ fn on_touch(me, other) {
     if other.kind == "coin" {
         destroy(other.id);
         set_state("coins", state("coins", 0) + 1);
+        sfx("coin");
         emit("coin", #{ x: other.x, y: other.y });
     } else if other.kind == "slime" {
         // Landing on top stomps it; anything else hurts.
@@ -59,14 +61,17 @@ fn on_touch(me, other) {
             destroy(other.id);
             set_vel(me, p.vx, -11.0);
             camera_shake(0.15);
+            sfx("stomp");
             emit("stomp", #{ x: other.x, y: other.y });
         } else {
             hurt(me);
         }
     } else if other.kind == "checkpoint" {
+        if state("spawn", [0, 0])[0] != other.x { sfx("checkpoint"); }
         set_state("spawn", [other.x, other.y]);
         emit("checkpoint", #{ x: other.x, y: other.y });
     } else if other.kind == "flag" {
+        if !state("won", false) { sfx("win"); }
         set_state("won", true);
         emit("win", #{ x: other.x, y: other.y });
     }
@@ -76,6 +81,7 @@ fn hurt(me) {
     let lives = state("lives", 3) - 1;
     set_state("lives", lives);
     camera_shake(0.6);
+    sfx("hurt");
     emit("hurt", #{ lives: lives });
     let sp = state("spawn", [2, 12]);
     set(me, "x", sp[0]);

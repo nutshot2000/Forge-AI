@@ -194,6 +194,7 @@
     <button id="import" title="Import images, maps, scripts or worlds (or drag files onto the editor)">📂 Import</button>
     <button id="export" title="Download the world, map or sprites">⤓ Export</button>
     <input type="file" id="file" multiple hidden accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.json,.tmj,.txt,.csv,.rhai">
+    <button id="mute" title="Game sounds on/off">🔊</button>
     <span class="spacer"></span>
     <span class="pill" id="agent">🤖 agent idle</span>
   </header>
@@ -396,6 +397,8 @@ function advance(now) {
 function show(f, jumped) {
   prev = (jumped || f.jump) ? null : cur;
   cur = f;
+  // Sounds play live (not while replaying a long burst of ticks).
+  if (queue.length < 30) for (const ev of f.events || []) if (ev.kind === 'sfx' && ev.data) FR.playSfx(ev.data.name);
   if (f.note) logNote(f, true);
   if ($('showev').checked) for (const ev of f.events || []) logEvent(f.tick, ev);
   for (const ev of f.events || []) addPulse(ev);
@@ -973,7 +976,7 @@ $('ssave').onclick = saveScript;
 // ---------- assets ----------
 let assetsKey = '';
 function renderAssets() {
-  const key = JSON.stringify([es.sprites, es.tiles, es.prefabs]);
+  const key = JSON.stringify([es.sprites, es.tiles, es.prefabs, es.sounds]);
   if (key === assetsKey) return;
   assetsKey = key;
   const box = $('assets'); box.innerHTML = '';
@@ -1006,6 +1009,14 @@ function renderAssets() {
     card.append(c, Object.assign(document.createElement('div'), { textContent: `'${ch}' ${def.name || ''}` }), Object.assign(document.createElement('div'), { className: 'meta', textContent: def.solid ? 'solid' : 'walkable' }));
     card.onclick = () => { $('ptile').value = ch; setTool('paint'); pushUi({ tile: ch }); };
     tg.append(card);
+  }
+
+  const sndg = section('Sounds', Object.keys(es.sounds || {}).length ? '' : 'No sounds yet. Ask the agent, e.g. "add a jump sound", or use presets: jump coin hit explosion powerup laser blip stomp win.');
+  for (const [name, snd] of Object.entries(es.sounds || {})) {
+    const card = document.createElement('div'); card.className = 'card'; card.title = 'Click to play';
+    card.append(Object.assign(document.createElement('div'), { textContent: '▶ ' + name }), Object.assign(document.createElement('div'), { className: 'meta', textContent: `${snd.wave} ${Math.round(snd.freq)}Hz ${snd.dur}s` }));
+    card.onclick = () => { FR.unlockAudio(); const was = mutedPref; FR.setMuted(false); FR.playSound(snd); FR.setMuted(was); };
+    sndg.append(card);
   }
 
   const pg = section('Prefabs', Object.keys(es.prefabs).length ? '' : 'No prefabs yet. Select an entity and click ★ Make prefab.');
@@ -1044,6 +1055,17 @@ $('play').onclick = () => { document.activeElement.blur(); cmd(es && es.playing 
 $('step').onclick = () => cmd({ cmd: 'step', ticks: 1 });
 $('tps').onchange = () => { if (es && es.playing) cmd({ cmd: 'play', tps: +$('tps').value }); };
 $('undo').onclick = () => cmd({ cmd: 'undo' });
+let mutedPref = false;
+try { mutedPref = localStorage.getItem('forge-muted') === '1'; } catch (e) {}
+FR.setMuted(mutedPref); $('mute').textContent = mutedPref ? '🔇' : '🔊';
+$('mute').onclick = () => {
+  mutedPref = !mutedPref; FR.setMuted(mutedPref); FR.unlockAudio();
+  $('mute').textContent = mutedPref ? '🔇' : '🔊';
+  try { localStorage.setItem('forge-muted', mutedPref ? '1' : '0'); } catch (e) {}
+};
+// Browsers only allow sound after the user has interacted with the page.
+window.addEventListener('pointerdown', () => FR.unlockAudio(), { once: true });
+window.addEventListener('keydown', () => FR.unlockAudio(), { once: true });
 $('redo').onclick = () => cmd({ cmd: 'redo' });
 $('snap').onclick = () => {
   const name = prompt('Snapshot name:', 'snap-' + ((es && es.snapshots.length) + 1 || 1));
@@ -1463,7 +1485,7 @@ $('export').onclick = ev => {
 };
 
 function renderAll() {
-  FR.setAssets(es.sprites, es.tiles, es.background);
+  FR.setAssets(es.sprites, es.tiles, es.background, es.sounds);
   $('path').textContent = es.path || '(unsaved world)';
   $('play').textContent = es.playing ? '⏸ Pause' : '▶ Play';
   $('play').classList.toggle('on', es.playing);

@@ -124,10 +124,52 @@ pub struct TileDef {
 }
 
 /// Pixel art as text: each row is a string, each char a palette key. `.` and ` ` are transparent.
+/// Animated sprites add more `frames` (same palette), played at `fps`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Sprite {
     pub palette: BTreeMap<String, String>,
     pub pixels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frames: Vec<Vec<String>>,
+    #[serde(default = "eight", skip_serializing_if = "is_eight")]
+    pub fps: f64,
+}
+fn eight() -> f64 {
+    8.0
+}
+fn is_eight(v: &f64) -> bool {
+    *v == 8.0
+}
+
+/// A sound effect as a recipe, synthesized by the browser (editor and exported games).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Sound {
+    /// square | sine | triangle | saw | noise
+    pub wave: String,
+    /// Starting pitch in Hz.
+    pub freq: f64,
+    /// Pitch change per second in Hz (negative falls).
+    pub slide: f64,
+    /// Length in seconds.
+    pub dur: f64,
+    /// 0..1
+    pub vol: f64,
+    /// Fade-in in seconds.
+    pub attack: f64,
+    /// Vibrato depth in Hz and speed in Hz.
+    pub vibrato: f64,
+    pub vibrato_rate: f64,
+    /// Arpeggio: semitone offsets stepped through every `arp_speed` seconds.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub arp: Vec<f64>,
+    pub arp_speed: f64,
+}
+
+impl Default for Sound {
+    fn default() -> Self {
+        Sound { wave: "square".into(), freq: 440.0, slide: 0.0, dur: 0.15, vol: 0.3, attack: 0.005, vibrato: 0.0, vibrato_rate: 0.0, arp: vec![], arp_speed: 0.06 }
+    }
 }
 
 /// Keyboard state for scripts. `down` = held now, `pressed` = went down since the last tick.
@@ -268,6 +310,8 @@ pub struct World {
     pub tiles: BTreeMap<String, TileDef>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sprites: BTreeMap<String, Sprite>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sounds: BTreeMap<String, Sound>,
     /// Reusable entity templates: name -> props (may include kind, script, sprite...).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub prefabs: BTreeMap<String, BTreeMap<String, Value>>,

@@ -64,7 +64,8 @@ pub const COMMANDS: &[Cmd] = &[
         opt("color", "string?", "css color"), opt("sprite", "string?", "sprite name"), opt("delete", "bool", "remove this tile type")] },
     Cmd { name: "sprite", group: "edit", desc: "Pixel art as text. Omit name to list; omit pixels to read one.", args: &[
         opt("name", "string", "sprite name"), opt("pixels", "array", "rows of palette chars, '.' = transparent (e.g. 8x8 or 16x16)"),
-        opt("palette", "object", "{char: css color}"), opt("delete", "bool", "remove the sprite")] },
+        opt("palette", "object", "{char: css color}"), opt("frames", "array", "extra animation frames (each an array of rows, same palette)"),
+        opt("fps", "number", "animation speed, default 8"), opt("delete", "bool", "remove the sprite")] },
     Cmd { name: "prefab", group: "edit", desc: "Reusable entity templates. Omit name to list; omit props to read one.", args: &[
         opt("name", "string", "prefab name"), opt("props", "object", "template: kind, script, sprite, hp, tags..."), opt("delete", "bool", "remove the prefab")] },
 
@@ -101,6 +102,12 @@ pub const COMMANDS: &[Cmd] = &[
         opt("sky", "any", "a css color, or [top, bottom] for a gradient; null removes it"),
         opt("layers", "array", "[{sprite, parallax (0 = fixed, 1 = moves with the map), y (top, in tiles), height (tiles), repeat (default true)}]"),
         opt("clear", "bool", "remove the whole background first")] },
+    Cmd { name: "sound", group: "edit", desc: "A sound effect as a recipe (synthesized in the browser). Omit name to list sounds and presets. Scripts play it with sfx(name).", args: &[
+        opt("name", "string", "sound name"), opt("preset", "string", "start from: jump coin hit explosion powerup laser blip stomp win"),
+        opt("wave", "string", "square | sine | triangle | saw | noise"), opt("freq", "number", "starting pitch, Hz"),
+        opt("slide", "number", "pitch change per second, Hz (negative falls)"), opt("dur", "number", "seconds"), opt("vol", "number", "0..1"),
+        opt("attack", "number", "fade-in seconds"), opt("vibrato", "number", "depth, Hz"), opt("vibrato_rate", "number", "speed, Hz"),
+        opt("arp", "array", "semitone steps, e.g. [0, 4, 7]"), opt("arp_speed", "number", "seconds per step"), opt("delete", "bool", "remove it")] },
     Cmd { name: "export_game", group: "files", desc: "Export the game as one self-contained .html file anyone can play in a browser.", args: &[
         opt("title", "string", "game title (default: the world's name)")] },
     Cmd { name: "undo", group: "run", desc: "Undo the last change (the user's or yours).", args: &[] },
@@ -247,6 +254,8 @@ pub const SCRIPT_API: &str = r#"{
   "map": "tile(x,y) set_tile(x,y,ch) walkable(x,y) solid(x,y) width() height()",
   "input": "key(name) = held, pressed(name) = pressed this tick. Names: up down left right space enter a-z 0-9 shift",
   "hud": "hud(key, text) shows text over the game; hud_clear()",
+  "sound": "sfx(name) plays a sound defined with the sound command",
+  "animation": "sprites may have frames + fps (they loop). An entity prop anims: {idle, run, jump, fall, climb} picks the sprite from its movement automatically",
   "world": "now() rand(n) rand_float() emit(kind[,data]) state(name[,default]) set_state(name,val) print(x)",
   "hooks": "entity scripts define fn tick(me) and optionally fn on_touch(me, other) (called once when two entities start overlapping; other is a map). A script named 'rules' may define fn rules(). Order each tick: tick scripts -> physics -> on_touch -> rules -> camera",
   "units": "positions are the top-left of the entity box, in tiles (1.0 = one tile); grid games use whole numbers",

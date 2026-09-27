@@ -50,6 +50,12 @@ and never see a fraction.
 - `{"cmd":"export_game","title":"My Game"}` writes `exports/My-Game.html`: one file with the engine (WebAssembly),
   renderer and world inside. Double-click to play; it has touch buttons on phones.
 
+- Backgrounds: `{"cmd":"background","sky":["#101a33","#5b7fb8"],"layers":[{"sprite":"hills","parallax":0.5,"y":9,"height":6}]}`.
+- Animation: sprites take `frames` + `fps`; an entity's `anims: {idle, run, jump, fall, climb}` picks the sprite from how it moves.
+- Sound: `{"cmd":"sound","name":"jump","preset":"jump"}` (presets: jump coin hit explosion powerup laser blip stomp win,
+  or set wave/freq/slide/dur/vol/arp yourself); scripts play it with `sfx("jump")`.
+- Free-movement pathfinding: `path_dir(me, x, y)` gives a direction along the shortest path; `path(...)` the whole path.
+
 Demos: `worlds/coin-dash` (grid) and `worlds/skyward` (platformer, built by `examples/make_skyward.py`).
 
 ## As an MCP tool

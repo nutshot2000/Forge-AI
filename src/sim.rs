@@ -300,6 +300,8 @@ fn build_engine(w: &W) -> Engine {
         w.borrow_mut().hud.insert(k.to_string(), t);
     });
     reg!(e, w, "hud_clear", move || { w.borrow_mut().hud.clear() });
+    // Sounds play in the editor and in exported games (they arrive as "sfx" events).
+    reg!(e, w, "sfx", move |name: &str| { w.borrow_mut().emit("sfx", json!({ "name": name })) });
 
     // --- world state, events, randomness ---
     reg!(e, w, "now", move || -> i64 { w.borrow().tick as i64 });

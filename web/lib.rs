@@ -13,6 +13,7 @@ thread_local! {
     static GAME: RefCell<Option<Sim>> = const { RefCell::new(None) };
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static ERR: RefCell<String> = const { RefCell::new(String::new()) };
+    static SEEN: RefCell<u64> = const { RefCell::new(0) };
 }
 
 fn out(s: String) -> u64 {
@@ -123,6 +124,11 @@ pub extern "C" fn fg_frame() -> u64 {
             let w = sim.world.borrow();
             let mut f = frame_of(&w);
             f["map"] = json!(map_key(&w.map));
+            // Sounds triggered since the previous frame.
+            let since = SEEN.with(|s| *s.borrow());
+            let sfx: Vec<Value> = w.events.iter().filter(|e| e.seq > since && e.kind == "sfx").map(|e| e.data["name"].clone()).collect();
+            SEEN.with(|s| *s.borrow_mut() = w.event_seq);
+            f["sfx"] = json!(sfx);
             f.to_string()
         })
     });

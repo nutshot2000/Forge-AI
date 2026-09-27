@@ -36,7 +36,9 @@ const WASM_B64 = "__WASM__";
     const send = (fn, s) => { const b = enc.encode(s); const p = ex.fg_alloc(b.length); new Uint8Array(ex.memory.buffer).set(b, p); return ex[fn](p, b.length); };
     const take = packed => { const big = BigInt(packed); const p = Number(big >> 32n), n = Number(big & 0xffffffffn); return dec.decode(new Uint8Array(ex.memory.buffer, p, n)); };
     if (!send('fg_load', JSON.stringify(WORLD))) throw new Error(take(ex.fg_error()));
-    R.setAssets(WORLD.sprites, WORLD.tiles, WORLD.background);
+    R.setAssets(WORLD.sprites, WORLD.tiles, WORLD.background, WORLD.sounds);
+    addEventListener('pointerdown', () => R.unlockAudio());
+    addEventListener('keydown', () => R.unlockAudio());
     msg.textContent = '';
 
     let rows = WORLD.map, mapKey = null, prev = null, cur = null, paused = false;
@@ -67,7 +69,7 @@ const WASM_B64 = "__WASM__";
       acc += paused ? 0 : Math.min(250, now - last);
       last = now;
       let n = 0;
-      while (acc >= dt && n < 8) { ex.fg_tick(1); prev = cur; cur = frame(); acc -= dt; n++; }
+      while (acc >= dt && n < 8) { ex.fg_tick(1); prev = cur; cur = frame(); for (const s of cur.sfx || []) R.playSfx(s); acc -= dt; n++; }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const v = R.makeView(cur, rows, W, H, { mode: 'camera', now });
       R.drawFrame(g, cur, rows, v, { prev, t: Math.min(1, acc / dt), now });

@@ -53,12 +53,23 @@ c({"cmd": "physics", "preset": "platformer"})
 # --- art (8x8 pixel sprites, palettes as css colors) ---
 c({"cmd": "sprite", "name": "knight", "palette": {"h": "#d7dee8", "v": "#1d2433", "b": "#4a78e0", "d": "#2b3f7a", "s": "#f5c542", "l": "#3a2a1a"},
    "pixels": ["..hhhh..", ".hhhhhh.", ".hvvvvh.", ".hhhhhh.", "sbbbbbb.", "s.bddb..", "..b..b..", "..l..l.."]})
+KNIGHT_PAL = {"h": "#d7dee8", "v": "#1d2433", "b": "#4a78e0", "d": "#2b3f7a", "s": "#f5c542", "l": "#3a2a1a"}
+c({"cmd": "sprite", "name": "knight_run", "palette": KNIGHT_PAL, "fps": 10,
+   "pixels": ["..hhhh..", ".hhhhhh.", ".hvvvvh.", ".hhhhhh.", "sbbbbbb.", "s.bddb..", ".b....b.", ".l....l."],
+   "frames": [["..hhhh..", ".hhhhhh.", ".hvvvvh.", ".hhhhhh.", "sbbbbbb.", "s.bddb..", "...bb...", "...ll..."]]})
+c({"cmd": "sprite", "name": "knight_jump", "palette": KNIGHT_PAL,
+   "pixels": ["..hhhh..", ".hhhhhh.", ".hvvvvh.", ".hhhhhh.", "sbbbbbbs", "..bddb..", ".bb..bb.", ".l....l."]})
 c({"cmd": "sprite", "name": "slime", "palette": {"g": "#6fd35f", "d": "#3a9a3a", "w": "#ffffff", "k": "#10200f"},
-   "pixels": ["........", "........", "..gggg..", ".gwggwg.", ".gkggkg.", "gggggggg", "gddddddg", ".gggggg."]})
+   "pixels": ["........", "........", "..gggg..", ".gwggwg.", ".gkggkg.", "gggggggg", "gddddddg", ".gggggg."], "fps": 4,
+   "frames": [["........", "........", "........", "..gggg..", ".gwggwg.", "ggkggkgg", "gddddddg", "gggggggg"]]})
 c({"cmd": "sprite", "name": "coin", "palette": {"y": "#f5c542", "o": "#d99a1e", "w": "#fff4c2"},
-   "pixels": ["..yyyy..", ".yowyyy.", "yoyyyyoy", "yoyyyyoy", "yoyyyyoy", "yoyyyyoy", ".yooooy.", "..yyyy.."]})
+   "pixels": ["..yyyy..", ".yowyyy.", "yoyyyyoy", "yoyyyyoy", "yoyyyyoy", "yoyyyyoy", ".yooooy.", "..yyyy.."], "fps": 8,
+   "frames": [["...yy...", "..yowy..", "..yoyy..", "..yoyy..", "..yoyy..", "..yoyy..", "..yooy..", "...yy..."],
+              ["...yy...", "...wy...", "...yy...", "...yy...", "...yy...", "...yy...", "...oy...", "...yy..."],
+              ["...yy...", "..ywoy..", "..yyoy..", "..yyoy..", "..yyoy..", "..yyoy..", "..yooy..", "...yy..."]]})
 c({"cmd": "sprite", "name": "flag", "palette": {"p": "#c9d1d9", "r": "#ff5f6d", "w": "#ffd0d4"},
-   "pixels": ["prrrr...", "prrwrr..", "prrrrrr.", "prrrr...", "p.......", "p.......", "p.......", "p......."]})
+   "pixels": ["prrrr...", "prrwrr..", "prrrrrr.", "prrrr...", "p.......", "p.......", "p.......", "p......."], "fps": 3,
+   "frames": [["prrr....", "prrwrrr.", "prrrrr..", "prrrrr..", "p.......", "p.......", "p.......", "p......."]]})
 c({"cmd": "sprite", "name": "checkpoint", "palette": {"p": "#c9d1d9", "b": "#5fd3c9"},
    "pixels": ["pbbb....", "pbbbb...", "pbbb....", "p.......", "p.......", "p.......", "p.......", "p......."]})
 c({"cmd": "sprite", "name": "grass", "palette": {"g": "#4fae3a", "l": "#78d45e", "d": "#6b4a2e", "e": "#5a3c24"},
@@ -120,6 +131,8 @@ c({"cmd": "background", "sky": ["#101a33", "#2a4a7a", "#5b7fb8"], "layers": [
     {"sprite": "bg_mountains", "parallax": 0.25, "y": 3.5, "height": 9},
     {"sprite": "bg_hills", "parallax": 0.5, "y": 9, "height": 6},
 ]})
+for name, preset in [("jump", "jump"), ("coin", "coin"), ("stomp", "stomp"), ("hurt", "hit"), ("checkpoint", "powerup"), ("win", "win")]:
+    c({"cmd": "sound", "name": name, "preset": preset})
 c({"cmd": "tile", "char": "G", "name": "grass", "solid": True, "sprite": "grass"})
 c({"cmd": "tile", "char": "#", "name": "dirt", "solid": True, "sprite": "dirt"})
 c({"cmd": "tile", "char": "=", "name": "plank", "platform": True, "sprite": "plank"})
@@ -150,6 +163,7 @@ fn tick(me) {
         vy = get(me).vy;
         coyote = 0;
         buffer = 0;
+        sfx("jump");
         emit("jump");
     }
     // Let go early for a short hop.
@@ -181,6 +195,7 @@ fn on_touch(me, other) {
     if other.kind == "coin" {
         destroy(other.id);
         set_state("coins", state("coins", 0) + 1);
+        sfx("coin");
         emit("coin", #{ x: other.x, y: other.y });
     } else if other.kind == "slime" {
         // Landing on top stomps it; anything else hurts.
@@ -188,14 +203,17 @@ fn on_touch(me, other) {
             destroy(other.id);
             set_vel(me, p.vx, -11.0);
             camera_shake(0.15);
+            sfx("stomp");
             emit("stomp", #{ x: other.x, y: other.y });
         } else {
             hurt(me);
         }
     } else if other.kind == "checkpoint" {
+        if state("spawn", [0, 0])[0] != other.x { sfx("checkpoint"); }
         set_state("spawn", [other.x, other.y]);
         emit("checkpoint", #{ x: other.x, y: other.y });
     } else if other.kind == "flag" {
+        if !state("won", false) { sfx("win"); }
         set_state("won", true);
         emit("win", #{ x: other.x, y: other.y });
     }
@@ -205,6 +223,7 @@ fn hurt(me) {
     let lives = state("lives", 3) - 1;
     set_state("lives", lives);
     camera_shake(0.6);
+    sfx("hurt");
     emit("hurt", #{ lives: lives });
     let sp = state("spawn", [2, 12]);
     set(me, "x", sp[0]);
@@ -248,7 +267,8 @@ fn rules() {
 
 # --- prefabs ---
 c({"cmd": "prefab", "name": "player", "props": {"kind": "player", "script": "player", "sprite": "knight", "physics": True, "w": 0.75, "h": 0.9,
-                                                "flip": "auto", "z": 5, "coyote": 0, "buffer": 0, "gravity": 1, "tags": ["player"]}})
+                                                "flip": "auto", "z": 5, "coyote": 0, "buffer": 0, "gravity": 1, "tags": ["player"],
+                                                "anims": {"idle": "knight", "run": "knight_run", "jump": "knight_jump"}}})
 c({"cmd": "prefab", "name": "slime", "props": {"kind": "slime", "script": "slime", "sprite": "slime", "physics": True, "w": 0.9, "h": 0.7,
                                                "dir": -1, "speed": 2.0, "flip": "auto", "z": 3, "tags": ["enemy"]}})
 c({"cmd": "prefab", "name": "coin", "props": {"kind": "coin", "sprite": "coin", "w": 0.6, "h": 0.6, "z": 2, "tags": ["pickup"]}})

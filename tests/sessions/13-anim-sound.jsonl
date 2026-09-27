@@ -1,0 +1,18 @@
+# Animated sprites and sound recipes.
+{"cmd":"new","width":6,"height":4}
+{"cmd":"sprite","name":"blink","palette":{"a":"#fff"},"pixels":["a.","aa"],"frames":[[".a","aa"],["aa","a."]],"fps":4,"expect":{"ok":true,"frames":3}}
+{"cmd":"sprite","name":"bad","palette":{"a":"#fff"},"pixels":["a"],"frames":[["b"]],"expect":{"ok":false,"error":{"$contains":"frames: palette has no color"}}}
+{"cmd":"sprite","name":"blink","expect":{"sprite":{"fps":4,"frames":{"$len":2}}}}
+{"cmd":"sprite","name":"still","palette":{"a":"#fff"},"pixels":["a"],"expect":{"frames":1}}
+
+{"cmd":"sound","name":"jump","preset":"jump","expect":{"ok":true,"sound":{"wave":"square","freq":260}}}
+{"cmd":"sound","name":"jump","vol":0.5,"expect":{"sound":{"wave":"square","vol":0.5,"freq":260}}}
+{"cmd":"sound","name":"zap","wave":"buzz","expect":{"ok":false,"error":{"$contains":"unknown wave"}}}
+{"cmd":"sound","name":"zap","preset":"kazoo","expect":{"ok":false,"error":{"$contains":"unknown preset"}}}
+{"cmd":"sound","expect":{"sounds":{"jump":"*"},"presets":{"$len":9}}}
+{"cmd":"look","expect":{"sounds":["jump"]}}
+
+{"cmd":"exec","code":"sfx(\"jump\"); 1","expect":{"events":{"counts":{"sfx":1},"recent":[{"kind":"sfx","data":{"name":"jump"}}]}}}
+{"cmd":"undo"}
+{"cmd":"undo"}
+{"cmd":"sound","expect":{"sounds":{"jump":{"vol":0.22}}}}
