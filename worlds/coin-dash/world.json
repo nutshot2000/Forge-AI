@@ -1,18 +1,6 @@
 {
-  "tick": 147,
-  "camera": {
-    "x": 13.0,
-    "y": 7.5,
-    "view": [
-      0.0,
-      0.0
-    ],
-    "zoom": 1.0,
-    "lerp": 0.2,
-    "bounds": true,
-    "shake": 0.0
-  },
-  "rng": 1998715050314828423,
+  "tick": 0,
+  "rng": 7,
   "next_id": 15,
   "map": [
     "##########################",
@@ -32,17 +20,16 @@
     "##########################"
   ],
   "vars": {
-    "over": true,
     "total": 10
   },
   "entities": {
     "1": {
       "kind": "hero",
-      "x": 23,
-      "y": 13,
+      "x": 2,
+      "y": 7,
       "script": "player",
       "gold": 0,
-      "hp": 0,
+      "hp": 5,
       "prefab": "hero",
       "sprite": "knight",
       "tags": [
@@ -52,8 +39,8 @@
     },
     "2": {
       "kind": "slime",
-      "x": 23,
-      "y": 13,
+      "x": 11,
+      "y": 3,
       "script": "slime",
       "cooldown": 0,
       "dmg": 1,
@@ -67,8 +54,8 @@
     },
     "3": {
       "kind": "slime",
-      "x": 23,
-      "y": 13,
+      "x": 22,
+      "y": 8,
       "script": "slime",
       "cooldown": 0,
       "dmg": 1,
@@ -82,7 +69,7 @@
     },
     "4": {
       "kind": "slime",
-      "x": 9,
+      "x": 10,
       "y": 12,
       "script": "slime",
       "cooldown": 0,
@@ -352,8 +339,6 @@
     }
   },
   "hud": {
-    "gold": "Gold 0 / 10",
-    "hp": "HP   ",
-    "msg": "GAME OVER · press Undo to try again"
+    "msg": "Arrow keys / WASD to move · grab every coin"
   }
 }
