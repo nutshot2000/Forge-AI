@@ -103,6 +103,24 @@ pub unsafe extern "C" fn fg_input(p: *mut u8, n: usize) {
             for k in v["up"].as_array().into_iter().flatten().filter_map(Value::as_str) {
                 w.input.down.remove(&norm_key(k));
             }
+            let pair = |k: &str| v[k].as_array().and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]));
+            if let Some(m) = pair("mouse") {
+                w.input.mouse = Some(m);
+            }
+            if let Some(m) = pair("mouse_ui") {
+                w.input.mouse_ui = Some(m);
+            }
+            for b in v["mouse_down"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+                if w.input.buttons.insert(b.to_string()) {
+                    w.input.buttons_pressed.insert(b.to_string());
+                }
+            }
+            for b in v["mouse_up"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+                w.input.buttons.remove(b);
+            }
+            if let Some(name) = v["ui_click"].as_str() {
+                w.input.ui_clicks.insert(name.to_string());
+            }
         }
     });
 }
@@ -135,8 +153,10 @@ pub extern "C" fn fg_frame() -> u64 {
             // Sounds triggered since the previous frame.
             let since = SEEN.with(|s| *s.borrow());
             let sfx: Vec<Value> = w.events.iter().filter(|e| e.seq > since && e.kind == "sfx").map(|e| e.data["name"].clone()).collect();
+            let fx: Vec<Value> = w.events.iter().filter(|e| e.seq > since && e.kind == "fx").map(|e| e.data.clone()).collect();
             SEEN.with(|s| *s.borrow_mut() = w.event_seq);
             f["sfx"] = json!(sfx);
+            f["fx"] = json!(fx);
             f.to_string()
         })
     });

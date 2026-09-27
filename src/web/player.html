@@ -47,6 +47,24 @@ const WASM_B64 = "__WASM__";
     cur = frame();
 
     const input = (what, k) => send('fg_input', JSON.stringify({ [what]: [k] }));
+    // Mouse: position in map tiles and screen percent, buttons, and clicks on UI buttons.
+    let view = null, mouseAt = null;
+    const BTN = ['left', 'middle', 'right'];
+    const mousePos = ev => {
+      const b = cv.getBoundingClientRect(), px = ev.clientX - b.left, py = ev.clientY - b.top;
+      mouseAt = [px, py];
+      if (!view) return null;
+      const [wx, wy] = R.toWorld(view, px, py);
+      return { mouse: [wx, wy], mouse_ui: [px / b.width * 100, py / b.height * 100], px, py };
+    };
+    cv.addEventListener('pointermove', ev => { const m = mousePos(ev); if (m) send('fg_input', JSON.stringify({ mouse: m.mouse, mouse_ui: m.mouse_ui })); });
+    cv.addEventListener('pointerdown', ev => {
+      const m = mousePos(ev); if (!m) return;
+      const hit = R.uiHit(m.px, m.py);
+      send('fg_input', JSON.stringify(hit ? { ui_click: hit.name, mouse: m.mouse, mouse_ui: m.mouse_ui } : { mouse: m.mouse, mouse_ui: m.mouse_ui, mouse_down: [BTN[ev.button] || 'left'] }));
+    });
+    addEventListener('pointerup', ev => send('fg_input', JSON.stringify({ mouse_up: [BTN[ev.button] || 'left'] })));
+    cv.addEventListener('contextmenu', ev => ev.preventDefault());
     addEventListener('keydown', e => {
       if (e.key === 'p' || e.key === 'Escape') { paused = !paused; return; }
       if (!R.isGameKey(e.key)) return;
@@ -69,10 +87,11 @@ const WASM_B64 = "__WASM__";
       acc += paused ? 0 : Math.min(250, now - last);
       last = now;
       let n = 0;
-      while (acc >= dt && n < 8) { ex.fg_tick(1); prev = cur; cur = frame(); for (const s of cur.sfx || []) R.playSfx(s); acc -= dt; n++; }
+      while (acc >= dt && n < 8) { ex.fg_tick(1); prev = cur; cur = frame(); for (const s of cur.sfx || []) R.playSfx(s); for (const f of cur.fx || []) R.spawnFx(f, now); acc -= dt; n++; }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const v = R.makeView(cur, rows, W, H, { mode: 'camera', now });
-      R.drawFrame(g, cur, rows, v, { prev, t: Math.min(1, acc / dt), now });
+      view = v;
+      R.drawFrame(g, cur, rows, v, { prev, t: Math.min(1, acc / dt), now, mouse: mouseAt });
       if (paused) { g.fillStyle = '#0008'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.font = 'bold 28px system-ui'; g.textAlign = 'center'; g.fillText('Paused', W / 2, H / 2); }
     };
     requestAnimationFrame(loop);

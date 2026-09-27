@@ -8,6 +8,8 @@
 //!   platforms, projectiles). With `solid: true` (or `"platform"`) it carries whatever
 //!   stands on it.
 //! - Entities with `solid: true` / `"platform"` block dynamic bodies like tiles do.
+//! - `lifetime` (ticks) counts down and removes the entity at 0; `die_on_wall: true` removes a
+//!   body when it hits a wall, floor or ceiling. Cheap bullets need no script at all.
 //! - The map's sides and top act as walls; below the bottom row is open, so bodies can
 //!   fall out of the world (scripts check `y > height()`).
 
@@ -150,6 +152,20 @@ fn overlaps_ladder(w: &World, x: f64, y: f64, bw: f64, bh: f64) -> bool {
 /// Advances every body by one tick.
 pub fn step(w: &mut World) {
     let dt = w.dt();
+    // Lifetimes (any entity with `lifetime`, not just bodies).
+    let expired: Vec<u64> = w
+        .entities
+        .iter_mut()
+        .filter_map(|(id, e)| {
+            let life = e.props.get("lifetime").and_then(Value::as_f64)?;
+            e.props.insert("lifetime".into(), json!(life - 1.0));
+            (life <= 1.0).then_some(*id)
+        })
+        .collect();
+    for id in expired {
+        w.entities.remove(&id);
+    }
+
     let bodies: Vec<(u64, Body)> = w.entities.iter().map(|(id, e)| (*id, body(e))).filter(|(_, b)| *b != Body::None).collect();
     if bodies.is_empty() {
         return;
@@ -174,11 +190,12 @@ pub fn step(w: &mut World) {
     let max_fall = w.physics.max_fall;
 
     // 2. Dynamic bodies, in id order (deterministic).
+    let mut crashed = vec![];
     for (id, b) in &bodies {
         if *b != Body::Dynamic {
             continue;
         }
-        let e = &w.entities[id];
+        let Some(e) = w.entities.get(id) else { continue };
         let (bw, bh) = (e.w(), e.h());
         let (mut x, mut y) = (e.x, e.y);
         let (mut vx, mut vy) = (e.f("vx", 0.0), e.f("vy", 0.0));
@@ -245,6 +262,9 @@ pub fn step(w: &mut World) {
             y += vy * dt;
         }
         let on_ladder = overlaps_ladder(w, x, y, bw, bh);
+        if (hit_wall != 0 || hit_ceiling || on_ground) && w.entities[id].flag("die_on_wall") {
+            crashed.push(*id);
+        }
 
         let e = w.entities.get_mut(id).unwrap();
         e.x = x;
@@ -260,6 +280,11 @@ pub fn step(w: &mut World) {
             Some(g) => p.insert("ground_id".into(), json!(g)),
             None => p.remove("ground_id"),
         };
+    }
+    for id in crashed {
+        if let Some(e) = w.entities.remove(&id) {
+            w.emit("crashed", json!({ "id": id, "kind": e.kind, "x": e.x, "y": e.y }));
+        }
     }
 }
 
@@ -376,7 +401,7 @@ pub fn frame_entities(w: &World) -> Vec<Value> {
         .iter()
         .map(|(id, e)| {
             let mut extra = BTreeMap::new();
-            for k in ["w", "h", "flip", "angle", "alpha", "scale", "z", "vx", "vy", "anims", "on_ground", "on_ladder", "fit"] {
+            for k in ["w", "h", "flip", "angle", "alpha", "scale", "z", "vx", "vy", "anims", "on_ground", "on_ladder", "fit", "label", "label_color"] {
                 if let Some(v) = e.props.get(k) {
                     if !v.is_null() {
                         extra.insert(k, v.clone());

@@ -204,13 +204,31 @@ impl Default for Sound {
     }
 }
 
-/// Keyboard state for scripts. `down` = held now, `pressed` = went down since the last tick.
+/// Keyboard and mouse state for scripts. `down` = held now, `pressed` = went down since the
+/// last tick. Mouse buttons are "left" | "right" | "middle".
 #[derive(Clone, Debug, Default)]
 pub struct Input {
     pub down: BTreeSet<String>,
     pub pressed: BTreeSet<String>,
     /// Keys tapped by an agent: released automatically after one tick.
     pub taps: BTreeSet<String>,
+    /// Mouse position in map tiles, and on screen in percent (0..100) of the game view.
+    pub mouse: Option<[f64; 2]>,
+    pub mouse_ui: Option<[f64; 2]>,
+    pub buttons: BTreeSet<String>,
+    pub buttons_pressed: BTreeSet<String>,
+    pub button_taps: BTreeSet<String>,
+    /// UI buttons clicked since the last tick.
+    pub ui_clicks: BTreeSet<String>,
+}
+
+/// A full-screen color effect: fade_out / fade_in (to/from `color`) or a quick flash.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Effect {
+    pub kind: String,
+    pub color: String,
+    pub start: u64,
+    pub dur: u64,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -428,6 +446,14 @@ pub struct World {
     pub tweens: Vec<Tween>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screen: Option<Screen>,
+    /// On-screen UI elements set by scripts (text, panels, bars, buttons, images), by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub ui: BTreeMap<String, Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<Effect>,
+    /// Hit-stop: ticks left where the game holds still (scripts, physics and timers pause).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub freeze: u64,
     /// Game-wide values (score, lives, keys...) that carry over when `goto` changes level.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub game: BTreeMap<String, Value>,
@@ -572,10 +598,25 @@ impl World {
     /// Clears one-tick input state; called at the end of every tick.
     pub fn end_tick_input(&mut self) {
         self.input.pressed.clear();
+        self.input.buttons_pressed.clear();
+        self.input.ui_clicks.clear();
         let taps = std::mem::take(&mut self.input.taps);
         for k in taps {
             self.input.down.remove(&k);
         }
+        let taps = std::mem::take(&mut self.input.button_taps);
+        for b in taps {
+            self.input.buttons.remove(&b);
+        }
+    }
+
+    /// The topmost entity whose box contains a point (z order, then newest).
+    pub fn entity_at(&self, x: f64, y: f64) -> Option<u64> {
+        self.entities
+            .iter()
+            .filter(|(_, e)| x >= e.x && x < e.x + e.w() && y >= e.y && y < e.y + e.h())
+            .max_by(|a, b| a.1.f("z", 0.0).partial_cmp(&b.1.f("z", 0.0)).unwrap().then(a.0.cmp(b.0)))
+            .map(|(id, _)| *id)
     }
 
     pub fn spawn(&mut self, kind: &str, x: f64, y: f64, mut props: BTreeMap<String, Value>) -> u64 {

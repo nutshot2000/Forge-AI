@@ -193,8 +193,148 @@
       if (p && Math.abs(p[2] - x) < 4 && Math.abs(p[3] - y) < 4) { dx = p[2] + (x - p[2]) * ease; dy = p[3] + (y - p[3]) * ease; }
       R.drawEntity(g, e, dx, dy, v);
     }
+    R.drawLabels(g, list, v);
+    R.drawFx(g, v, opts.now ?? performance.now());
     if (opts.hud !== false) R.drawHud(g, frame.hud, v, opts.hudTop ?? 8);
+    R.uiRects = R.drawUi(g, frame.ui, v, opts.mouse);
+    if (frame.effect) R.drawEffect(g, frame.effect, v, frame.tick || 0);
     if (frame.screen && opts.screen !== false) R.drawScreen(g, frame.screen, v, frame.tick || 0);
+  };
+
+  // ---- labels above entities ----
+  R.drawLabels = (g, ents, v) => {
+    for (const e of ents) {
+      const ex = e[7] || {};
+      if (ex.label === undefined || ex.label === null || ex.label === '') continue;
+      const [x, y] = R.toScreen(v, e[2] + (ex.w ?? 1) / 2, e[3]);
+      const fs = Math.max(10, Math.min(18, v.s * 0.38));
+      g.font = `bold ${fs}px system-ui, sans-serif`;
+      const text = String(ex.label), tw = g.measureText(text).width + 8;
+      g.fillStyle = '#000a'; g.beginPath(); g.roundRect(x - tw / 2, y - fs - 8, tw, fs + 4, 4); g.fill();
+      g.fillStyle = ex.label_color || '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(text, x, y - fs / 2 - 6);
+    }
+  };
+
+  // ---- particles and floating text (cosmetic; they don't affect the game) ----
+  const PRESETS = {
+    explosion: { count: 34, speed: 6, colors: ['#fff2b0', '#ffd060', '#ff8a3d', '#ff4d3d'], life: 650, size: 0.22, gravity: 4, drag: 2.5 },
+    dust: { count: 10, speed: 1.8, colors: ['#c9b89c', '#8f8170'], life: 450, size: 0.16, gravity: 3, drag: 3, up: 0.8 },
+    sparkle: { count: 14, speed: 1.5, colors: ['#fff6b0', '#ffffff', '#ffe066'], life: 750, size: 0.12, gravity: -0.6, drag: 1.5, twinkle: true },
+    smoke: { count: 14, speed: 0.8, colors: ['#6b6f7a', '#8a8f99', '#4b4f58'], life: 1100, size: 0.3, gravity: -1.5, drag: 1, grow: 1.5 },
+    hit: { count: 10, speed: 5, colors: ['#ffffff', '#ff6b6b'], life: 260, size: 0.12, gravity: 0, drag: 5 },
+    confetti: { count: 40, speed: 6, colors: ['#ff5f6d', '#ffd060', '#5fd39a', '#7aa2ff', '#b48cff'], life: 1500, size: 0.15, gravity: 8, drag: 1.2, up: 1 },
+    splash: { count: 16, speed: 4, colors: ['#8ec5ff', '#2f6db3', '#ffffff'], life: 600, size: 0.14, gravity: 14, drag: 0.5, up: 1.2 },
+    trail: { count: 1, speed: 0.2, colors: ['#ffffffaa'], life: 300, size: 0.1, gravity: 0, drag: 0 },
+    fire: { count: 12, speed: 1.2, colors: ['#fff2b0', '#ffd060', '#ff8a3d', '#ff4d3d'], life: 520, size: 0.2, gravity: -3, drag: 1, shrink: true },
+  };
+  let parts = [], texts = [], lastFx = performance.now();
+  R.spawnFx = (d, now = performance.now()) => {
+    if (!d) return;
+    if (d.fx === 'text') { texts.push({ x: d.x, y: d.y, text: String(d.text), color: d.color || '#ffffff', t0: now }); return; }
+    const p = { ...(PRESETS[d.preset] || PRESETS.hit), ...(d.opts || {}) };
+    if (d.opts && d.opts.color) p.colors = [d.opts.color];
+    const n = Math.min(300, p.count | 0);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = p.speed * (0.35 + Math.random() * 0.65);
+      parts.push({ x: d.x, y: d.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (p.up || 0) * p.speed * Math.random(),
+        life: p.life * (0.6 + Math.random() * 0.4), age: 0, size: p.size * (0.6 + Math.random() * 0.8),
+        color: p.colors[(Math.random() * p.colors.length) | 0], g: p.gravity, drag: p.drag, grow: p.grow || 0, shrink: p.shrink, twinkle: p.twinkle });
+    }
+    if (parts.length > 3000) parts.splice(0, parts.length - 3000);
+  };
+  R.drawFx = (g, v, now) => {
+    const dt = Math.min(0.05, Math.max(0, (now - lastFx) / 1000));
+    lastFx = now;
+    const S = v.s;
+    parts = parts.filter(p => (p.age += dt * 1000) < p.life);
+    for (const p of parts) {
+      p.vy += p.g * dt;
+      const k = Math.max(0, 1 - p.drag * dt);
+      p.vx *= k; p.vy *= k;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const t = p.age / p.life;
+      const size = p.size * (1 + p.grow * t) * (p.shrink ? 1 - t : 1);
+      g.globalAlpha = Math.max(0, 1 - t) * (p.twinkle ? 0.5 + 0.5 * Math.sin(p.age / 40) : 1);
+      g.fillStyle = p.color;
+      const [sx, sy] = R.toScreen(v, p.x, p.y), px = Math.max(1, size * S);
+      g.fillRect(Math.round(sx - px / 2), Math.round(sy - px / 2), Math.ceil(px), Math.ceil(px));
+    }
+    g.globalAlpha = 1;
+    texts = texts.filter(t => now - t.t0 < 900);
+    for (const t of texts) {
+      const k = (now - t.t0) / 900;
+      const [sx, sy] = R.toScreen(v, t.x, t.y - k * 1.2);
+      const fs = Math.max(12, Math.min(26, S * 0.55));
+      g.font = `bold ${fs}px ui-monospace, Consolas, monospace`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.globalAlpha = 1 - k * k;
+      g.fillStyle = '#000'; g.fillText(t.text, sx + 2, sy + 2);
+      g.fillStyle = t.color; g.fillText(t.text, sx, sy);
+    }
+    g.globalAlpha = 1;
+  };
+
+  // ---- UI elements from scripts ----
+  const ANCHOR = { topleft: [0, 0], top: [0.5, 0], topright: [1, 0], left: [0, 0.5], center: [0.5, 0.5], right: [1, 0.5], bottomleft: [0, 1], bottom: [0.5, 1], bottomright: [1, 1] };
+  const uiFont = (e, fs) => `${e.bold === false ? '' : 'bold '}${fs}px ${e.font === 'mono' ? 'ui-monospace, Consolas, monospace' : 'system-ui, sans-serif'}`;
+  R.drawUi = (g, ui, v, mouse) => {
+    const rects = [];
+    if (!ui) return rects;
+    const els = Object.entries(ui).filter(([, e]) => e && e.visible !== false).sort((a, b) => (a[1].z || 0) - (b[1].z || 0));
+    for (const [name, e] of els) {
+      const world = e.space === 'world';
+      const unitW = world ? v.s : v.cw / 100, unitH = world ? v.s : v.ch / 100;
+      let [x, y] = world ? R.toScreen(v, e.x ?? 0, e.y ?? 0) : [(e.x ?? 0) * unitW, (e.y ?? 0) * unitH];
+      const type = e.type || 'text';
+      const fs = Math.max(9, (e.size ?? (world ? 0.5 : 4)) * unitH);
+      let w = (e.w ?? 0) * unitW, h = (e.h ?? 0) * unitH;
+      if (type === 'text' && !e.w) { g.font = uiFont(e, fs); w = Math.max(...String(e.text ?? '').split('\n').map(l => g.measureText(l).width)); h = fs * 1.25 * String(e.text ?? '').split('\n').length; }
+      if (type === 'button' && !e.w) { g.font = uiFont(e, fs); w = g.measureText(String(e.text ?? '')).width + fs * 1.6; h = fs * 2; }
+      const [ax, ay] = ANCHOR[e.anchor || 'topleft'] || [0, 0];
+      x -= w * ax; y -= h * ay;
+      g.globalAlpha = e.alpha ?? 1;
+      const hover = mouse && mouse[0] >= x && mouse[0] <= x + w && mouse[1] >= y && mouse[1] <= y + h;
+      if (type === 'panel' || type === 'button') {
+        g.fillStyle = e.color || (type === 'button' ? (hover ? '#3a4a7a' : '#2a3558') : '#0d1018d9');
+        g.beginPath(); g.roundRect(x, y, w, h, e.radius ?? Math.min(12, h / 4)); g.fill();
+        if (e.border || type === 'button') { g.strokeStyle = e.border || (hover ? '#9fb8ff' : '#6d83c4'); g.lineWidth = 2; g.stroke(); }
+        if (type === 'button') rects.push({ name, x, y, w, h });
+      }
+      if (type === 'bar') {
+        const frac = Math.max(0, Math.min(1, (e.value ?? 0) / (e.max || 1)));
+        g.fillStyle = e.bg || '#000b'; g.fillRect(x, y, w, h);
+        g.fillStyle = e.color || (frac > 0.5 ? '#5fd39a' : frac > 0.25 ? '#f0b35a' : '#ff6b6b'); g.fillRect(x, y, w * frac, h);
+        g.strokeStyle = '#000d'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      }
+      if (type === 'image' && e.sprite) R.drawSprite(g, e.sprite, x, y, w || fs * 2, h || fs * 2, undefined, e.fit);
+      const text = type === 'text' || type === 'button' ? e.text : (e.text || null);
+      if (text !== undefined && text !== null && text !== '') {
+        g.font = uiFont(e, fs);
+        g.textBaseline = 'middle';
+        const align = type === 'button' ? 'center' : (e.align || 'left');
+        g.textAlign = align;
+        const tx = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x;
+        const lines = String(text).split('\n');
+        lines.forEach((line, i) => {
+          const ty = type === 'text' ? y + fs / 2 + i * fs * 1.25 : y + h / 2 + (i - (lines.length - 1) / 2) * fs * 1.25;
+          if (e.shadow !== false) { g.fillStyle = '#000c'; g.fillText(line, tx + Math.max(1, fs / 12), ty + Math.max(1, fs / 12)); }
+          g.fillStyle = type === 'text' ? (e.color || '#fff') : (e.text_color || '#fff');
+          g.fillText(line, tx, ty);
+        });
+      }
+      g.globalAlpha = 1;
+    }
+    return rects;
+  };
+  R.uiRects = [];
+  R.uiHit = (px, py) => (R.uiRects || []).find(r => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
+
+  // ---- fades and flashes ----
+  R.drawEffect = (g, fx, v, tick) => {
+    const t = Math.max(0, (tick - fx.start) / Math.max(1, fx.dur));
+    const a = fx.kind === 'fade_out' ? Math.min(1, t) : fx.kind === 'fade_in' ? Math.max(0, 1 - t) : Math.max(0, 1 - t) * 0.8;
+    if (a <= 0) return;
+    g.globalAlpha = a; g.fillStyle = fx.color || '#000'; g.fillRect(0, 0, v.cw, v.ch); g.globalAlpha = 1;
   };
 
   // Title / pause / game over overlays set by show_screen().

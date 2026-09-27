@@ -412,6 +412,101 @@ fn build_engine(w: &W) -> Engine {
         }
     });
 
+    // --- mouse ---
+    reg!(e, w, "mouse_x", move || -> f64 { w.borrow().input.mouse.map_or(-1.0, |m| m[0]) });
+    reg!(e, w, "mouse_y", move || -> f64 { w.borrow().input.mouse.map_or(-1.0, |m| m[1]) });
+    reg!(e, w, "mouse_ui_x", move || -> f64 { w.borrow().input.mouse_ui.map_or(-1.0, |m| m[0]) });
+    reg!(e, w, "mouse_ui_y", move || -> f64 { w.borrow().input.mouse_ui.map_or(-1.0, |m| m[1]) });
+    reg!(e, w, "mouse_down", move |b: &str| -> bool { w.borrow().input.buttons.contains(b) });
+    reg!(e, w, "mouse_pressed", move |b: &str| -> bool { w.borrow().input.buttons_pressed.contains(b) });
+    reg!(e, w, "hovered", move || -> i64 {
+        let w = w.borrow();
+        w.input.mouse.and_then(|m| w.entity_at(m[0], m[1])).map_or(-1, |id| id as i64)
+    });
+    reg!(e, w, "ui_clicked", move |name: &str| -> bool { w.borrow().input.ui_clicks.contains(name) });
+
+    // --- angles (degrees; 0 = right, 90 = down) ---
+    reg!(e, w, "angle_to", move |a: i64, b: i64| -> RR<f64> {
+        let w = w.borrow();
+        let ((ax, ay), (bx, by)) = (ent(&w, a, "angle_to")?.center(), ent(&w, b, "angle_to")?.center());
+        Ok((by - ay).atan2(bx - ax).to_degrees())
+    });
+    reg!(e, w, "angle_to_point", move |a: i64, x: Dynamic, y: Dynamic| -> RR<f64> {
+        let w = w.borrow();
+        let (ax, ay) = ent(&w, a, "angle_to_point")?.center();
+        Ok((n(&y)? - ay).atan2(n(&x)? - ax).to_degrees())
+    });
+    e.register_fn("vel_from_angle", |angle: Dynamic, speed: Dynamic| -> RR<Array> {
+        let (a, s) = (n(&angle)?.to_radians(), n(&speed)?);
+        Ok(vec![Dynamic::from(a.cos() * s), Dynamic::from(a.sin() * s)])
+    });
+    e.register_fn("turn_toward", |cur: Dynamic, target: Dynamic, max_step: Dynamic| -> RR<f64> {
+        let (c, t, m) = (n(&cur)?, n(&target)?, n(&max_step)?.abs());
+        let diff = (t - c + 540.0).rem_euclid(360.0) - 180.0;
+        Ok(c + diff.clamp(-m, m))
+    });
+    reg!(e, w, "move_forward", move |id: i64, speed: Dynamic| -> RR<()> {
+        let mut w = w.borrow_mut();
+        let en = w.entities.get_mut(&(id as u64)).ok_or_else(|| format!("move_forward: no entity {id}"))?;
+        let a = en.f("angle", 0.0).to_radians();
+        let s = n(&speed)?;
+        en.props.insert("vx".into(), json!(a.cos() * s));
+        en.props.insert("vy".into(), json!(a.sin() * s));
+        Ok(())
+    });
+
+    // --- UI elements (screen: x/y in percent 0..100; space: "world" = tiles) ---
+    reg!(e, w, "ui", move |name: &str, el: RMap| {
+        let v = to_json(&Dynamic::from_map(el));
+        w.borrow_mut().ui.insert(name.to_string(), v);
+    });
+    reg!(e, w, "ui_set", move |name: &str, key: &str, value: Dynamic| -> RR<()> {
+        let mut w = w.borrow_mut();
+        let el = w.ui.get_mut(name).ok_or_else(|| format!("ui_set: no ui element '{name}' (create it with ui(name, #{{...}}))"))?;
+        el[key] = to_json(&value);
+        Ok(())
+    });
+    reg!(e, w, "ui_remove", move |name: &str| { w.borrow_mut().ui.remove(name); });
+    reg!(e, w, "ui_clear", move || { w.borrow_mut().ui.clear() });
+
+    // --- juice: particles, floating text, screen effects, hit-stop ---
+    reg!(e, w, "particles", move |preset: &str, x: Dynamic, y: Dynamic| -> RR<()> {
+        let (x, y) = (n(&x)?, n(&y)?);
+        w.borrow_mut().emit("fx", json!({ "fx": "particles", "preset": preset, "x": x, "y": y }));
+        Ok(())
+    });
+    reg!(e, w, "particles", move |preset: &str, x: Dynamic, y: Dynamic, opts: RMap| -> RR<()> {
+        let (x, y) = (n(&x)?, n(&y)?);
+        w.borrow_mut().emit("fx", json!({ "fx": "particles", "preset": preset, "x": x, "y": y, "opts": to_json(&Dynamic::from_map(opts)) }));
+        Ok(())
+    });
+    reg!(e, w, "float_text", move |x: Dynamic, y: Dynamic, text: Dynamic| -> RR<()> {
+        let (x, y) = (n(&x)?, n(&y)?);
+        w.borrow_mut().emit("fx", json!({ "fx": "text", "x": x, "y": y, "text": text.to_string() }));
+        Ok(())
+    });
+    reg!(e, w, "float_text", move |x: Dynamic, y: Dynamic, text: Dynamic, color: &str| -> RR<()> {
+        let (x, y) = (n(&x)?, n(&y)?);
+        w.borrow_mut().emit("fx", json!({ "fx": "text", "x": x, "y": y, "text": text.to_string(), "color": color }));
+        Ok(())
+    });
+    for kind in ["fade_out", "fade_in", "flash"] {
+        let w1 = w.clone();
+        e.register_fn(kind, move |ticks: i64, color: &str| {
+            let mut w = w1.borrow_mut();
+            let start = w.tick;
+            w.effect = Some(crate::world::Effect { kind: kind.into(), color: color.into(), start, dur: ticks.max(1) as u64 });
+        });
+        let w2 = w.clone();
+        e.register_fn(kind, move |ticks: i64| {
+            let mut w = w2.borrow_mut();
+            let start = w.tick;
+            let color = if kind == "flash" { "#ffffff" } else { "#000000" };
+            w.effect = Some(crate::world::Effect { kind: kind.into(), color: color.into(), start, dur: ticks.max(1) as u64 });
+        });
+    }
+    reg!(e, w, "freeze", move |ticks: i64| { let mut w = w.borrow_mut(); w.freeze = w.freeze.max(ticks.max(0) as u64); });
+
     // --- world state, events, randomness ---
     reg!(e, w, "now", move || -> i64 { w.borrow().tick as i64 });
     reg!(e, w, "rand", move |n: i64| -> i64 {
@@ -551,7 +646,45 @@ impl Sim {
 
     pub fn run_tick(&mut self) {
         let start = self.world.borrow().event_seq;
+        // Hit-stop: time passes but nothing moves.
+        let frozen = {
+            let mut w = self.world.borrow_mut();
+            if w.freeze > 0 {
+                w.freeze -= 1;
+                w.tick += 1;
+                w.end_tick_input();
+                true
+            } else {
+                false
+            }
+        };
+        if frozen {
+            if self.recording && self.recorder.is_some() {
+                self.record(None, vec![], false);
+            }
+            return;
+        }
         self.world.borrow_mut().in_tick = true;
+
+        // 0. Clicks: on_click(me) on the entity under the mouse, on_ui(name) in rules.
+        let (clicked, ui_clicks) = {
+            let w = self.world.borrow();
+            let clicked = if w.input.buttons_pressed.contains("left") { w.input.mouse.and_then(|m| w.entity_at(m[0], m[1])) } else { None };
+            (clicked, w.input.ui_clicks.iter().cloned().collect::<Vec<_>>())
+        };
+        if let Some(id) = clicked {
+            let scripts = self.world.borrow().entities.get(&id).map(|e| e.scripts()).unwrap_or_default();
+            self.world.borrow_mut().emit("click", json!({ "id": id }));
+            for s in scripts.into_iter().filter(|s| self.has_fn(s, "on_click", 1)).collect::<Vec<_>>() {
+                self.call(&s, "on_click", (id as i64,), Some(id));
+            }
+        }
+        for name in ui_clicks {
+            self.world.borrow_mut().emit("ui_click", json!({ "name": name }));
+            if self.has_fn("rules", "on_ui", 1) {
+                self.call("rules", "on_ui", (name,), None);
+            }
+        }
 
         // 1. Entity scripts.
         let jobs: Vec<(u64, String)> =
@@ -875,6 +1008,9 @@ pub fn frame_of(w: &World) -> Value {
         "tick_rate": w.tick_rate,
         "screen": w.screen,
         "level": w.level,
+        "ui": w.ui,
+        "effect": w.effect,
+        "frozen": w.freeze > 0,
     })
 }
 

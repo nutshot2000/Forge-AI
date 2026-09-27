@@ -23,6 +23,7 @@ fn tick(me) {
     } else {
         create("bullet", a[0] - 0.15, a[1] - 0.15, #{
             physics: true, gravity: 0, w: 0.3, h: 0.3, glyph: "*", color: "#ffd060", z: 4,
+            die_on_wall: true, lifetime: 240,
             script: "projectile", damage: prop(me, "damage", 1), from: me, hits: prop(me, "target_tag", "player")
         })
     };

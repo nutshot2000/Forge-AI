@@ -657,6 +657,10 @@ impl App {
             "screen": w.screen,
             "timers": w.timers,
             "tweens": w.tweens.len(),
+            "ui": w.ui,
+            "effect": w.effect,
+            "freeze": w.freeze,
+            "mouse": w.input.mouse,
             "recent_activity": self.activity.iter().rev().take(12).collect::<Vec<_>>(),
             "undo": self.undo.len(),
             "redo": self.redo.len(),
@@ -904,7 +908,32 @@ impl App {
                     w.input.pressed.insert(k.clone());
                     w.input.taps.insert(k);
                 }
-                Ok(json!({ "down": w.input.down, "pressed": w.input.pressed }))
+                let pair = |k: &str| c.get(k).and_then(Value::as_array).and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]));
+                if let Some(m) = pair("mouse") {
+                    w.input.mouse = Some(m);
+                }
+                if let Some(m) = pair("mouse_ui") {
+                    w.input.mouse_ui = Some(m);
+                }
+                for b in str_list(c, "mouse_down") {
+                    if w.input.buttons.insert(b.clone()) {
+                        w.input.buttons_pressed.insert(b);
+                    }
+                }
+                for b in str_list(c, "mouse_up") {
+                    w.input.buttons.remove(&b);
+                }
+                // An agent's click: move there, press, release after one tick.
+                if let Some(m) = pair("click") {
+                    w.input.mouse = Some(m);
+                    w.input.buttons.insert("left".into());
+                    w.input.buttons_pressed.insert("left".into());
+                    w.input.button_taps.insert("left".into());
+                }
+                if let Some(name) = c.get("ui_click").and_then(Value::as_str) {
+                    w.input.ui_clicks.insert(name.to_string());
+                }
+                Ok(json!({ "down": w.input.down, "pressed": w.input.pressed, "mouse": w.input.mouse, "buttons": w.input.buttons }))
             }
             "undo" | "redo" => {
                 let current = self.sim.world.borrow().clone();

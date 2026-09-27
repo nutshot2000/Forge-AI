@@ -405,8 +405,11 @@ function advance(now) {
 function show(f, jumped) {
   prev = (jumped || f.jump) ? null : cur;
   cur = f;
-  // Sounds play live (not while replaying a long burst of ticks).
-  if (queue.length < 30) for (const ev of f.events || []) if (ev.kind === 'sfx' && ev.data) FR.playSfx(ev.data.name);
+  // Sounds and effects play live (not while replaying a long burst of ticks).
+  if (queue.length < 30) for (const ev of f.events || []) {
+    if (ev.kind === 'sfx' && ev.data) FR.playSfx(ev.data.name);
+    if (ev.kind === 'fx' && ev.data) FR.spawnFx(ev.data);
+  }
   if (f.note) logNote(f, true);
   if ($('showev').checked) for (const ev of f.events || []) logEvent(f.tick, ev);
   for (const ev of f.events || []) addPulse(ev);
@@ -493,7 +496,7 @@ function draw(now) {
   TS = V.s;
   const t = prev ? Math.min(1, (now - lastAdvance) / (1000 / replaySpeed())) : 1;
   FR.drawFrame(ctx, cur, rows, V, {
-    prev, t, now, hudTop: 56,
+    prev, t, now, hudTop: 56, mouse: gameMouse,
     skip: drag ? drag.id : null,
     tileAt: paint ? (x, y, ch) => paint.cells.has(x + ',' + y) ? paint.tile : ch : null,
   });
@@ -629,6 +632,32 @@ function dragPos() {
   const snap = v => hover.shift ? Math.round(v * 8) / 8 : Math.round(v);
   return { x: snap(hover.wx - drag.ox), y: snap(hover.wy - drag.oy) };
 }
+
+// While the game is playing, the mouse belongs to the game (like the keyboard).
+let gameMouse = null, gameMouseSent = 0;
+const playingNow = () => es && es.playing;
+function gameMousePayload(ev) {
+  const b = cv.getBoundingClientRect(), px = ev.clientX - b.left, py = ev.clientY - b.top;
+  gameMouse = [px, py];
+  const [wx, wy] = FR.toWorld(V, px, py);
+  return { mouse: [wx, wy], mouse_ui: [px / b.width * 100, py / b.height * 100], px, py };
+}
+const MBTN = ['left', 'middle', 'right'];
+cv.addEventListener('mousemove', ev => {
+  if (!playingNow() || !V) return;
+  const m = gameMousePayload(ev), now = performance.now();
+  if (now - gameMouseSent < 30) return;
+  gameMouseSent = now;
+  fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'input', mouse: m.mouse, mouse_ui: m.mouse_ui }) });
+}, true);
+cv.addEventListener('mousedown', ev => {
+  if (!playingNow() || !V) return;
+  ev.stopImmediatePropagation(); ev.preventDefault();
+  const m = gameMousePayload(ev), hit = FR.uiHit(m.px, m.py);
+  cmd(hit ? { cmd: 'input', ui_click: hit.name, mouse: m.mouse, mouse_ui: m.mouse_ui } : { cmd: 'input', mouse: m.mouse, mouse_ui: m.mouse_ui, mouse_down: MBTN[ev.button] || 'left' });
+}, true);
+window.addEventListener('mouseup', ev => { if (playingNow()) fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'input', mouse_up: MBTN[ev.button] || 'left' }) }); }, true);
+cv.addEventListener('contextmenu', ev => { if (playingNow()) { ev.preventDefault(); ev.stopImmediatePropagation(); } }, true);
 
 cv.addEventListener('mousedown', ev => {
   if (!cur || !V) return;

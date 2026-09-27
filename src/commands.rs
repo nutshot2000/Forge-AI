@@ -86,9 +86,12 @@ pub const COMMANDS: &[Cmd] = &[
         opt("inputs", "object", "a scripted player: keys held from each tick offset, e.g. {\"0\":[\"right\"],\"20\":[\"right\",\"space\"],\"40\":[]}")] },
     Cmd { name: "play", group: "run", desc: "Run in real time so the user can watch and play.", args: &[opt("tps", "number", "ticks per second, default 8")] },
     Cmd { name: "pause", group: "run", desc: "Stop real-time play.", args: &[] },
-    Cmd { name: "input", group: "run", desc: "Press keys as a player would (names: up down left right space enter a-z 0-9 shift).", args: &[
+    Cmd { name: "input", group: "run", desc: "Play as a player would: keys (up down left right space enter a-z 0-9 shift) and the mouse.", args: &[
         opt("tap", "any", "key or keys pressed for one tick"), opt("down", "any", "key(s) to hold"),
-        opt("up", "any", "key(s) to release"), opt("clear", "bool", "release everything")] },
+        opt("up", "any", "key(s) to release"), opt("clear", "bool", "release everything"),
+        opt("mouse", "array", "[x, y] mouse position in map tiles"), opt("mouse_ui", "array", "[x, y] on screen in percent"),
+        opt("mouse_down", "any", "left | right | middle"), opt("mouse_up", "any", "left | right | middle"),
+        opt("click", "array", "[x, y]: move there and click (released after one tick)"), opt("ui_click", "string", "click the UI button with this name")] },
     Cmd { name: "snapshot", group: "run", desc: "Save the full world state in memory.", args: &[req("name", "string", "snapshot name")] },
     Cmd { name: "restore", group: "run", desc: "Rewind to a snapshot.", args: &[req("name", "string", "snapshot name")] },
     Cmd { name: "trials", group: "run", desc: "Replay from a snapshot many times with different seeds and score each run.", args: &[
@@ -266,6 +269,11 @@ pub const SCRIPT_API: &str = r#"{
   "input": "key(name) = held, pressed(name) = pressed this tick. Names: up down left right space enter a-z 0-9 shift",
   "hud": "hud(key, text) shows text over the game; hud_clear()",
   "sound": "sfx(name) plays a sound defined with the sound command",
+  "mouse": "mouse_x() mouse_y() (map tiles, -1 if none) mouse_ui_x() mouse_ui_y() (screen percent) mouse_down(b) mouse_pressed(b) (b = left|right|middle) hovered() -> entity id or -1. fn on_click(me) runs when the entity is clicked",
+  "angles": "degrees, 0 = right, 90 = down: angle_to(a,b) angle_to_point(id,x,y) vel_from_angle(angle,speed) -> [vx,vy] move_forward(id,speed) (uses the angle prop) turn_toward(cur,target,max_step)",
+  "ui": "ui(name, #{type, ...}) creates/replaces an element; types: text (text, size, color, align), panel (w, h, color, border), bar (w, h, value, max, color, bg), button (w, h, text) -> fn on_ui(name) in rules and ui_clicked(name), image (sprite, w, h). Position x, y in screen percent (0..100) with anchor (topleft | top | center | ...), or space: \"world\" for map tiles (health bars above heads). ui_set(name, key, value), ui_remove(name), ui_clear(). Entity props label / label_color draw a label above it",
+  "juice": "particles(preset, x, y[, #{color, count, speed, size, life}]) presets: explosion dust sparkle smoke hit confetti splash trail fire; float_text(x, y, text[, color]); fade_out(ticks[, color]) fade_in(ticks[, color]) flash(ticks[, color]); freeze(ticks) = hit-stop; camera_shake(tiles)",
+  "lifetime": "props lifetime (ticks, the engine removes it at 0) and die_on_wall: true make cheap scriptless bullets",
   "animation": "sprites may have frames + fps (they loop). An entity prop anims: {idle, run, jump, fall, climb} picks the sprite from its movement automatically",
   "world": "now() rand(n) rand_float() emit(kind[,data]) state(name[,default]) set_state(name,val) print(x) prop(id,key,default)",
   "timers": "after(me,ticks,name[,data]) once, every(me,ticks,name[,data]) repeating -> calls fn on_timer(me, name, data) in the entity's script; me = -1 for world timers -> fn on_timer(name, data) in rules. cancel_timer(me,name)",
