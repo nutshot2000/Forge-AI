@@ -76,8 +76,9 @@ pub struct App {
     proposals: Vec<Value>,
     proposal_seq: u64,
     pub ui: Ui,
-    undo: Vec<(World, String)>,
-    redo: Vec<(World, String)>,
+    /// Each entry is a world state, a label, and the folder that state belongs to.
+    undo: Vec<(World, String, Option<PathBuf>)>,
+    redo: Vec<(World, String, Option<PathBuf>)>,
     /// Agent -> user messages and map markers, shown in the editor.
     notices: VecDeque<Value>,
     notice_seq: u64,
@@ -183,6 +184,10 @@ fn activity_note(c: &Value, cmd: &str, source: &str) -> Option<String> {
         "request" => format!("📝 request: {}", s("text")),
         "resolve" => format!("✓ resolved request #{}: {}", c["rid"], s("reply")),
         "import" => "import world".into(),
+        "create_world" => format!("create world '{}'", s("name")),
+        "duplicate_world" => format!("duplicate world '{}' as '{}'", s("name"), s("to")),
+        "rename_world" => format!("rename world '{}' to '{}'", s("name"), s("to")),
+        "delete_world" => format!("move world '{}' to trash", s("name")),
         "recover" => "restore unsaved work".into(),
         "set_map" => "replace map".into(),
         "redo" => "redo".into(),
@@ -209,11 +214,75 @@ fn find_recovery(world_dir: &std::path::Path) -> Option<Value> {
     Some(json!({ "dir": dir.display().to_string(), "time": meta["time"], "tick": meta["tick"] }))
 }
 
+/// A safe world folder name: letters, digits, spaces, dashes and underscores.
+fn world_name(name: &str) -> Result<String, String> {
+    let n = name.trim();
+    if n.is_empty() || n.starts_with('.') || !n.chars().all(|c| c.is_alphanumeric() || c == ' ' || c == '-' || c == '_') {
+        return Err(format!("'{name}' isn't a valid world name: use letters, numbers, spaces, - and _"));
+    }
+    Ok(n.to_string())
+}
+
+/// Card data for the world browser: size, contents, a small map preview.
+fn world_summary(p: &std::path::Path, open: Option<&std::path::Path>) -> Value {
+    let name = p.file_name().unwrap().to_string_lossy().into_owned();
+    let modified = std::fs::metadata(p.join("world.json"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    match World::load_dir(p) {
+        Ok(w) => {
+            let mut kinds = BTreeMap::<String, u64>::new();
+            for e in w.entities.values() {
+                *kinds.entry(e.kind.clone()).or_default() += 1;
+            }
+            let ents: Vec<Value> = w.entities.values().take(300).map(|e| json!([e.x, e.y, e.kind, e.props.get("color")])).collect();
+            // Preview color per tile type: its color, else the most used color in its sprite.
+            let tiles: BTreeMap<&String, Option<String>> = w
+                .tiles
+                .iter()
+                .map(|(k, d)| {
+                    let from_sprite = d.sprite.as_ref().and_then(|name| {
+                        let sp = w.sprites.get(name)?;
+                        let mut counts = BTreeMap::<char, usize>::new();
+                        for ch in sp.pixels.iter().flat_map(|r| r.chars()).filter(|c| *c != '.' && *c != ' ') {
+                            *counts.entry(ch).or_default() += 1;
+                        }
+                        let top = counts.into_iter().max_by_key(|(_, n)| *n)?.0;
+                        sp.palette.get(&top.to_string()).cloned()
+                    });
+                    (k, d.color.clone().or(from_sprite))
+                })
+                .collect();
+            json!({
+                "name": name, "path": p.display().to_string(), "modified": modified,
+                "size": [w.width(), w.height()], "entities": w.entities.len(), "kinds": kinds,
+                "scripts": w.scripts.len(), "sprites": w.sprites.len(),
+                "map": if w.width() * w.height() <= 20000 { json!(w.map) } else { Value::Null },
+                "ents": ents, "tile_colors": tiles,
+                "open": open == Some(p), "unsaved_work": p.join(".autosave").join("autosave.json").exists(),
+            })
+        }
+        Err(e) => json!({ "name": name, "path": p.display().to_string(), "modified": modified, "error": e }),
+    }
+}
+
+/// The Forge launcher reopens the last world you had open.
+fn remember_last_world(p: &std::path::Path) {
+    let dir = PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default()).join("forge");
+    if std::fs::create_dir_all(&dir).is_ok() {
+        let full = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let _ = std::fs::write(dir.join("last-world.txt"), full.display().to_string().trim_start_matches(r"\\?\"));
+    }
+}
+
 /// Commands that change the world, and so get an undo entry first.
 fn mutates(c: &Value, cmd: &str) -> bool {
     let has = |k: &str| c.get(k).is_some();
     match cmd {
-        "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover" => true,
+        "new" | "load" | "exec" | "restore" | "create" | "destroy" | "set" | "paint" | "step" | "resize" | "import" | "set_map" | "recover"
+        | "create_world" => true,
         "script" => has("code"),
         "sprite" => has("pixels") || has("delete"),
         "prefab" => has("props") || has("delete"),
@@ -264,6 +333,9 @@ impl App {
         self.dirty = false;
         self.autosave_pending = false;
         self.recovery = find_recovery(&p);
+        if self.autosave_enabled {
+            remember_last_world(&p);
+        }
         self.path = Some(p);
         // The agent's first look reports changes relative to the world as loaded.
         self.last_look = Some(self.sim.world.borrow().clone());
@@ -276,6 +348,18 @@ impl App {
             Some(p) => p.join(".autosave"),
             None => PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default()).join("forge").join("autosave").join("untitled"),
         }
+    }
+
+    /// The folder that holds all the worlds: the open world's parent, else `worlds/` found
+    /// next to (or above) the forge executable, else `./worlds`.
+    fn worlds_dir(&self) -> PathBuf {
+        if let Some(parent) = self.path.as_ref().and_then(|p| p.parent()) {
+            return parent.to_path_buf();
+        }
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.ancestors().map(|d| d.join("worlds")).find(|d| d.is_dir()))
+            .unwrap_or_else(|| PathBuf::from("worlds"))
     }
 
     /// Marks the world as changed (edits, or ticks while playing).
@@ -709,11 +793,13 @@ impl App {
                 Ok(json!({ "down": w.input.down, "pressed": w.input.pressed }))
             }
             "undo" | "redo" => {
-                let (from, to) = if cmd == "undo" { (&mut self.undo, &mut self.redo) } else { (&mut self.redo, &mut self.undo) };
-                let (world, label) = from.pop().ok_or(format!("nothing to {cmd}"))?;
                 let current = self.sim.world.borrow().clone();
-                to.push((current, label.clone()));
+                let current_path = self.path.clone();
+                let (from, to) = if cmd == "undo" { (&mut self.undo, &mut self.redo) } else { (&mut self.redo, &mut self.undo) };
+                let (world, label, path) = from.pop().ok_or(format!("nothing to {cmd}"))?;
+                to.push((current, label.clone(), current_path));
                 self.sim.replace_world(world);
+                self.path = path;
                 Ok(json!({ cmd: label, "undo": self.undo.len(), "redo": self.redo.len() }))
             }
 
@@ -901,6 +987,83 @@ impl App {
 
             // --- world files, scripts, experiments ---
             "load" => self.load(need_str(c, "path")?),
+
+            // --- the world browser ---
+            "worlds" => {
+                let dir = self.worlds_dir();
+                let mut list = vec![];
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for e in entries.flatten() {
+                        let p = e.path();
+                        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+                        if name.starts_with('.') || !p.join("world.json").exists() {
+                            continue;
+                        }
+                        list.push(world_summary(&p, self.path.as_deref()));
+                    }
+                }
+                list.sort_by(|a, b| b["modified"].as_u64().cmp(&a["modified"].as_u64()));
+                Ok(json!({ "dir": dir.display().to_string(), "worlds": list }))
+            }
+            "create_world" => {
+                let name = world_name(need_str(c, "name")?)?;
+                let dest = self.worlds_dir().join(&name);
+                if dest.exists() {
+                    return Err(format!("a world called '{name}' already exists"));
+                }
+                let w = match arg_str(c, "copy_of") {
+                    Some(src) => World::load_dir(&self.worlds_dir().join(world_name(src)?))?,
+                    None => {
+                        let (w, h) = (arg_int(c, "width").unwrap_or(24).clamp(3, 400) as usize, arg_int(c, "height").unwrap_or(14).clamp(3, 400) as usize);
+                        let wall = "#".repeat(w);
+                        let mid = format!("#{}#", ".".repeat(w - 2));
+                        let map = (0..h).map(|y| if y == 0 || y == h - 1 { wall.clone() } else { mid.clone() }).collect();
+                        World { map, rng: 1, next_id: 1, ..World::default() }
+                    }
+                };
+                w.save_dir(&dest)?;
+                self.load(&dest.display().to_string())
+            }
+            "duplicate_world" => {
+                let src = self.worlds_dir().join(world_name(need_str(c, "name")?)?);
+                let to = world_name(need_str(c, "to")?)?;
+                let dest = self.worlds_dir().join(&to);
+                if dest.exists() {
+                    return Err(format!("a world called '{to}' already exists"));
+                }
+                World::load_dir(&src)?.save_dir(&dest)?;
+                Ok(json!({ "created": to }))
+            }
+            "rename_world" => {
+                let from = world_name(need_str(c, "name")?)?;
+                let to = world_name(need_str(c, "to")?)?;
+                let (src, dest) = (self.worlds_dir().join(&from), self.worlds_dir().join(&to));
+                if dest.exists() {
+                    return Err(format!("a world called '{to}' already exists"));
+                }
+                std::fs::rename(&src, &dest).map_err(|e| format!("couldn't rename: {e}"))?;
+                if self.path.as_deref() == Some(src.as_path()) {
+                    self.path = Some(dest.clone());
+                    if self.autosave_enabled {
+                        remember_last_world(&dest);
+                    }
+                }
+                Ok(json!({ "renamed": [from, to] }))
+            }
+            "delete_world" => {
+                let name = world_name(need_str(c, "name")?)?;
+                let src = self.worlds_dir().join(&name);
+                if self.path.as_deref() == Some(src.as_path()) {
+                    return Err("that world is open; open another world first".into());
+                }
+                // Never really deleted: moved to worlds/.trash so it can be recovered by hand.
+                let trash = self.worlds_dir().join(".trash");
+                std::fs::create_dir_all(&trash).map_err(|e| e.to_string())?;
+                let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let dest = trash.join(format!("{name}-{stamp}"));
+                std::fs::rename(&src, &dest).map_err(|e| format!("couldn't move to trash: {e}"))?;
+                Ok(json!({ "trashed": name, "to": dest.display().to_string() }))
+            }
             "recover" => {
                 let dir = self.recovery.as_ref().and_then(|r| r["dir"].as_str()).map(PathBuf::from).ok_or("no unsaved work to recover")?;
                 let w = World::load_dir(&dir)?;
@@ -1024,7 +1187,7 @@ impl App {
         let undoable = mutates(c, &cmd) && self.in_batch == 0;
         if undoable {
             let snap = self.sim.world.borrow().clone();
-            self.undo.push((snap, format!("{source}: {}", note.as_deref().unwrap_or(&cmd))));
+            self.undo.push((snap, format!("{source}: {}", note.as_deref().unwrap_or(&cmd)), self.path.clone()));
             if self.undo.len() > UNDO_CAP {
                 self.undo.remove(0);
             }
@@ -1082,6 +1245,7 @@ impl App {
         let atomic = c.get("atomic") == Some(&json!(true));
         let preview = c.get("preview") == Some(&json!(true));
         let before = self.sim.world.borrow().clone();
+        let path_before = self.path.clone();
         let recording = self.sim.recording;
         if preview {
             self.quiet += 1;
@@ -1112,7 +1276,7 @@ impl App {
         if rolled_back {
             self.sim.replace_world(before);
         } else if changed && self.in_batch == 0 {
-            self.undo.push((before, format!("{source}: batch of {} commands", cmds.len())));
+            self.undo.push((before, format!("{source}: batch of {} commands", cmds.len()), path_before));
             if self.undo.len() > UNDO_CAP {
                 self.undo.remove(0);
             }

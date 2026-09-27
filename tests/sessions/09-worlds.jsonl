@@ -1,0 +1,18 @@
+# The world browser: list, create, copy, duplicate, rename, delete (to trash).
+{"cmd":"new","width":6,"height":4}
+{"cmd":"create","kind":"star","x":2,"y":1}
+{"cmd":"save","path":"$TMP/worlds/alpha","expect":{"ok":true}}
+{"cmd":"worlds","expect":{"worlds":[{"name":"alpha","open":true,"entities":1,"size":[6,4],"map":{"$len":4}}]}}
+{"cmd":"create_world","name":"beta","width":10,"height":5,"expect":{"ok":true,"size":[10,5],"entities":0}}
+{"cmd":"worlds","expect":{"worlds":{"$len":2}}}
+{"cmd":"create_world","name":"beta","expect":{"ok":false,"error":{"$contains":"already exists"}}}
+{"cmd":"create_world","name":"../escape","expect":{"ok":false,"error":{"$contains":"isn't a valid world name"}}}
+{"cmd":"create_world","name":"gamma","copy_of":"alpha","expect":{"ok":true,"entities":1}}
+{"cmd":"duplicate_world","name":"alpha","to":"alpha copy","expect":{"created":"alpha copy"}}
+{"cmd":"rename_world","name":"alpha copy","to":"delta","expect":{"renamed":["alpha copy","delta"]}}
+{"cmd":"delete_world","name":"gamma","expect":{"ok":false,"error":{"$contains":"is open"}}}
+{"cmd":"delete_world","name":"delta","expect":{"ok":true,"trashed":"delta"}}
+{"cmd":"worlds","expect":{"worlds":{"$len":3}}}
+{"cmd":"undo","expect":{"ok":true}}
+{"cmd":"state","expect":{"entities":0}}
+{"cmd":"save","expect":{"saved":{"$contains":"beta"}}}

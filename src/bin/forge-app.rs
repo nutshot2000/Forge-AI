@@ -89,6 +89,11 @@ fn main() {
         .nth(1)
         .map(PathBuf::from)
         .or_else(|| {
+            let last = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("forge").join("last-world.txt");
+            let p = PathBuf::from(std::fs::read_to_string(last).ok()?.trim());
+            p.join("world.json").exists().then_some(p)
+        })
+        .or_else(|| {
             let worlds = root.as_ref()?.join("worlds");
             ["coin-dash", "dungeon"].iter().map(|w| worlds.join(w)).find(|p| p.join("world.json").exists())
         });

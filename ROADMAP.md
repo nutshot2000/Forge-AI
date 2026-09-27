@@ -37,13 +37,13 @@ Items have IDs (e.g. `P1.4`) so we can refer to them ("let's do P1.4 next"). ☐
 
 So we can move fast later without breaking things.
 
-- ☐ **P0.1 Version history (git)** for the project, with a commit after each feature. Easy rollback if anything breaks.
-- ☐ **P0.2 Autosave and crash recovery:** the open world autosaves every minute to `.autosave/`; the app offers to restore after a crash.
-- ☐ **P0.3 Command test suite:** replay `.jsonl` sessions and compare results, so every command is covered and regressions get caught.
-- ☐ **P0.4 Typed command schemas:** each command gets a JSON schema, so the agent gets exact argument errors and the MCP tool is more reliable.
-- ☐ **P0.5 Transactions:** `{"cmd":"batch","atomic":true,...}` applies all or nothing, with one undo step for the whole batch.
-- ☐ **P0.6 Dry run / preview:** any change command with `"preview":true` returns the diff without applying it; the editor can show "the agent wants to change X, Y, Z [Apply]".
-- ☐ **P0.7 World browser in the app:** open, create, duplicate and rename worlds from a start screen, with no terminal.
+- ☑ **P0.1 Version history (git)** for the project, with a commit after each feature. Easy rollback if anything breaks.
+- ☑ **P0.2 Autosave and crash recovery:** the open world autosaves every minute to `.autosave/`; the app offers to restore after a crash.
+- ☑ **P0.3 Command test suite:** replay `.jsonl` sessions and compare results, so every command is covered and regressions get caught. (`cargo test`; CI workflow parked in `ci/` until the GitHub token has the `workflow` scope)
+- ☑ **P0.4 Typed command schemas:** each command gets a JSON schema, so the agent gets exact argument errors and the MCP tool is more reliable.
+- ☑ **P0.5 Transactions:** `{"cmd":"batch","atomic":true,...}` applies all or nothing, with one undo step for the whole batch.
+- ☑ **P0.6 Dry run / preview:** any change command with `"preview":true` returns the diff without applying it; the editor can show "the agent wants to change X, Y, Z [Apply]".
+- ☑ **P0.7 World browser in the app:** open, create, duplicate and rename worlds from a start screen, with no terminal.
 
 ---
 

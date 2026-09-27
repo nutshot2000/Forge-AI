@@ -123,6 +123,13 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "import", group: "files", desc: "Replace the world with an exported one.", args: &[req("world", "object", "a value from export")] },
     Cmd { name: "recover", group: "files", desc: "Load unsaved work found from an earlier session (see recovery in look).", args: &[] },
     Cmd { name: "discard_recovery", group: "files", desc: "Throw that unsaved work away.", args: &[] },
+    Cmd { name: "worlds", group: "files", desc: "List the worlds in the project (name, size, contents, map preview, which one is open).", args: &[] },
+    Cmd { name: "create_world", group: "files", desc: "Create a new world folder and open it.", args: &[
+        req("name", "string", "world name (letters, numbers, spaces, - and _)"), opt("width", "int", "default 24"), opt("height", "int", "default 14"),
+        opt("copy_of", "string", "start as a copy of this world instead of an empty room")] },
+    Cmd { name: "duplicate_world", group: "files", desc: "Copy a world under a new name.", args: &[req("name", "string", "world to copy"), req("to", "string", "new name")] },
+    Cmd { name: "rename_world", group: "files", desc: "Rename a world.", args: &[req("name", "string", "current name"), req("to", "string", "new name")] },
+    Cmd { name: "delete_world", group: "files", desc: "Move a world to worlds/.trash (recoverable by hand). The open world can't be deleted.", args: &[req("name", "string", "world name")] },
     Cmd { name: "quit", group: "files", desc: "Stop an engine started by the Forge app.", args: &[] },
 ];
 

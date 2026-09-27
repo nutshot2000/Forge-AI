@@ -49,6 +49,12 @@ The shortcut and the MCP registration run the installed copy in `app\`. After ch
 
 See [ROADMAP.md](ROADMAP.md) for what's built and what's next.
 
+## Development
+
+- `cargo test --release` replays every session in `tests/sessions/*.jsonl` (each line is a command plus the result it should give).
+- `install.ps1` builds and updates the installed app in `app\`; it works even while Forge is open (the next launch picks up the new version).
+- Every command and its arguments are defined once in `src/commands.rs`; validation, `help` and the MCP tool schema are generated from it.
+
 ## Commands
 
 | cmd | what it does |

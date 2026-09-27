@@ -56,6 +56,19 @@
   .tools .box { display: flex; gap: 4px; align-items: center; background: #151821e6; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
   .tools button, .tools select { padding: 3px 9px; font-size: 12px; }
   .recover { position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); z-index: 5; display: none; align-items: center; gap: 10px; background: #2a2412f2; color: #ffe2a8; border: 1px solid var(--warn); border-radius: 10px; padding: 6px 8px 6px 14px; font-size: 13px; box-shadow: 0 8px 30px #0008; white-space: nowrap; }
+  #worldsbg { position: fixed; inset: 0; z-index: 28; background: #0b0d12f2; display: none; overflow: auto; }
+  #worldsbg .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+  #worldsbg h1 { font-size: 20px; margin: 0 0 4px; } #worldsbg .sub2 { color: var(--dim); margin-bottom: 18px; font-size: 13px; }
+  .wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .wcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; position: relative; }
+  .wcard:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .wcard.open { border-color: var(--you); }
+  .wcard canvas { width: 100%; aspect-ratio: 16 / 9; background: #0a0c10; image-rendering: pixelated; display: block; }
+  .wcard .wb { padding: 10px 12px; } .wcard .wn { font-weight: 600; font-size: 14px; } .wcard .wm { color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .wcard .more { position: absolute; top: 8px; right: 8px; padding: 2px 8px; background: #151821e6; }
+  .wcard .tag { position: absolute; top: 8px; left: 8px; font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #0f2a1ee6; color: var(--you); border: 1px solid var(--you); }
+  .wcard.new { align-items: center; justify-content: center; min-height: 190px; color: var(--accent); font-size: 15px; border-style: dashed; }
+  #worldsbg .close { position: fixed; top: 16px; right: 20px; }
   #props { position: absolute; top: 56px; right: 10px; width: min(330px, 45%); display: flex; flex-direction: column; gap: 8px; z-index: 4; }
   .prop { background: #1b1630f2; border: 1px solid var(--agent); border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 28px #0009; font-size: 12.5px; animation: pop .25s ease-out; }
   .prop h4 { margin: 0 0 6px; font-size: 13px; color: #e9e0ff; } .prop h4 span { color: var(--agent); margin-right: 6px; }
@@ -162,6 +175,7 @@
 <div class="app">
   <header>
     <span class="logo">FORGE</span>
+    <button id="worldsbtn" title="Open, create, duplicate, rename or delete worlds">📁 Worlds</button>
     <span class="path" id="path"></span>
     <span class="sep"></span>
     <button id="play" title="Run the game in real time (Space when paused, Esc to stop)">▶ Play</button>
@@ -246,6 +260,10 @@ or a JSON command, e.g.  {"cmd":"step","ticks":50}
   </section>
 </div>
 <div id="tip"></div>
+<div id="worldsbg"><button class="close" id="wclose">✕ Close</button><div class="wrap">
+  <h1>Your worlds</h1><div class="sub2" id="wdir"></div>
+  <div class="wgrid" id="wgrid"></div>
+</div></div>
 <div id="drop">Drop images (→ sprites), maps (.txt .csv .tmj), scripts (.rhai) or worlds (.json)</div>
 
 <script>
@@ -1117,6 +1135,88 @@ async function newScriptFor(e) {
   const r = await cmd({ cmd: 'script', name, code });
   if (r.ok) { await cmd({ cmd: 'set', id: e.id, key: 'script', value: name }); await refresh(); openScript(name); }
 }
+
+// ---------- world browser ----------
+function drawWorldPreview(c, w) {
+  const g = c.getContext('2d');
+  const W = c.width = 320, H = c.height = 180;
+  g.fillStyle = '#0a0c10'; g.fillRect(0, 0, W, H);
+  if (!w.map) { g.fillStyle = '#7d8599'; g.font = '13px system-ui'; g.fillText(`${w.size[0]}×${w.size[1]} map`, 12, 24); return; }
+  const mw = Math.max(...w.map.map(r => [...r].length)), mh = w.map.length;
+  const s = Math.max(1, Math.floor(Math.min((W - 16) / mw, (H - 16) / mh)));
+  const ox = Math.floor((W - mw * s) / 2), oy = Math.floor((H - mh * s) / 2);
+  w.map.forEach((row, y) => [...row].forEach((ch, x) => {
+    const col = (w.tile_colors || {})[ch];
+    g.fillStyle = col || (ch === '#' ? '#3a4152' : ch === '.' ? '#15171e' : ch === ' ' ? '#0a0c10' : `hsl(${hue(ch)} 35% 30%)`);
+    g.fillRect(ox + x * s, oy + y * s, s, s);
+  }));
+  for (const [x, y, kind, color] of w.ents || []) {
+    g.fillStyle = color || `hsl(${hue(kind)} 68% 62%)`;
+    g.fillRect(ox + x * s + s * .15, oy + y * s + s * .15, Math.max(1, s * .7), Math.max(1, s * .7));
+  }
+}
+function ago(secs) {
+  if (!secs) return '';
+  const d = Date.now() / 1000 - secs;
+  return d < 90 ? 'just now' : d < 3600 ? `${Math.round(d / 60)} min ago` : d < 86400 ? `${Math.round(d / 3600)} h ago` : new Date(secs * 1000).toLocaleDateString();
+}
+async function openWorlds() {
+  $('worldsbg').style.display = 'block';
+  const r = await cmd({ cmd: 'worlds' });
+  if (!r.ok) { $('wgrid').textContent = r.error; return; }
+  $('wdir').textContent = r.dir;
+  const grid = $('wgrid'); grid.innerHTML = '';
+  const nw = document.createElement('div'); nw.className = 'wcard new'; nw.textContent = '＋ New world';
+  nw.onclick = newWorld; grid.append(nw);
+  for (const w of r.worlds) {
+    const card = document.createElement('div'); card.className = 'wcard' + (w.open ? ' open' : '');
+    const c = document.createElement('canvas'); drawWorldPreview(c, w);
+    const body = document.createElement('div'); body.className = 'wb';
+    body.innerHTML = '<div class="wn"></div><div class="wm"></div>';
+    body.firstChild.textContent = w.name;
+    body.lastChild.textContent = w.error ? '⚠ ' + w.error : `${w.size[0]}×${w.size[1]} · ${w.entities} things · ${ago(w.modified)}` + (w.unsaved_work ? ' · has unsaved work' : '');
+    const more = document.createElement('button'); more.className = 'more'; more.textContent = '⋯';
+    more.onclick = ev => { ev.stopPropagation(); worldMenu(ev, w); };
+    card.append(c, body, more);
+    if (w.open) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'open now'; card.append(t); }
+    card.onclick = () => openWorld(w);
+    card.oncontextmenu = ev => { ev.preventDefault(); worldMenu(ev, w); };
+    grid.append(card);
+  }
+}
+async function openWorld(w) {
+  if (w.open) { $('worldsbg').style.display = 'none'; return; }
+  if (es && es.unsaved && es.path) {
+    if (confirm('Save your changes to the current world before switching?\n(OK = save, Cancel = keep them as unsaved work you can restore later)')) await cmd({ cmd: 'save' });
+  }
+  const r = await cmd({ cmd: 'load', path: w.path });
+  if (!r.ok) return toast('Could not open: ' + r.error, 'you');
+  $('worldsbg').style.display = 'none';
+  select(null);
+}
+async function newWorld() {
+  const name = await ask('New world', 'A name for your game or level, e.g. "cave level" or "space shooter".');
+  if (!name) return;
+  const size = await ask('Map size', 'Width × height in tiles.', '24x14');
+  if (!size) return;
+  const [width, height] = size.toLowerCase().split(/[x×, ]+/).map(Number);
+  const r = await cmd({ cmd: 'create_world', name, width: width || 24, height: height || 14 });
+  if (!r.ok) return toast(r.error, 'you');
+  $('worldsbg').style.display = 'none'; select(null);
+}
+function worldMenu(ev, w) {
+  menu(ev.clientX, ev.clientY, w.name, [
+    { label: '📂 Open', run: () => openWorld(w) },
+    { label: '⧉ Duplicate…', run: async () => { const to = await ask('Duplicate world', `Name for the copy of "${w.name}"`, w.name + ' copy'); if (to) { const r = await cmd({ cmd: 'duplicate_world', name: w.name, to }); if (!r.ok) toast(r.error, 'you'); openWorlds(); } } },
+    { label: '✚ New world based on this…', run: async () => { const name = await ask('New world from ' + w.name, 'Name for the new world'); if (name) { const r = await cmd({ cmd: 'create_world', name, copy_of: w.name }); if (!r.ok) toast(r.error, 'you'); else $('worldsbg').style.display = 'none'; } } },
+    { label: '✎ Rename…', run: async () => { const to = await ask('Rename world', '', w.name); if (to && to !== w.name) { const r = await cmd({ cmd: 'rename_world', name: w.name, to }); if (!r.ok) toast(r.error, 'you'); openWorlds(); } } },
+    '-',
+    { label: '🗑 Delete (moves to trash)', cls: 'danger', run: async () => { if (!confirm(`Move "${w.name}" to the trash folder?`)) return; const r = await cmd({ cmd: 'delete_world', name: w.name }); if (!r.ok) toast(r.error, 'you'); openWorlds(); } },
+  ]);
+}
+$('worldsbtn').onclick = openWorlds;
+$('wclose').onclick = () => $('worldsbg').style.display = 'none';
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('worldsbg').style.display === 'block' && !document.querySelector('.modal-bg')) $('worldsbg').style.display = 'none'; });
 
 // ---------- suggestions from the agent ----------
 function describeDiff(d) {
