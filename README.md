@@ -41,7 +41,7 @@ If port 7878 is taken it tries the next ones (the `state` command reports the UR
 edit → simulate → inspect loop. It stops at the first failed command unless you pass `"keep_going": true`.
 
 ```
-claude mcp add --scope user forge -- C:\Users\batti\forge\target\release\forge.exe --mcp C:\Users\batti\forge\worlds\dungeon
+claude mcp add --scope user forge -- <forge folder>\app\forge.exe --mcp <forge folder>\worlds\coin-dash
 ```
 
 The shortcut and the MCP registration run the installed copy in `app\`. After changing the engine, run `install.ps1`
