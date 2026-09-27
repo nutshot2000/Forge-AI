@@ -1,0 +1,29 @@
+# A tour of forge. Run:  forge worlds/dungeon < examples/tour.jsonl
+# 1. Look at the world
+{"cmd":"state"}
+{"cmd":"view"}
+{"cmd":"query","where":"e.kind == \"slime\" && e.x > 15"}
+
+# 2. Save a checkpoint, then fast-forward until the game ends
+{"cmd":"snapshot","name":"start"}
+{"cmd":"step","ticks":1000,"until":"count(\"coin\") == 0 || count(\"hero\") == 0","kinds":["death","win"]}
+{"cmd":"view"}
+{"cmd":"diff","from":"start"}
+
+# 3. Playtest the level 200 times with different random seeds: how often does the hero survive?
+{"cmd":"trials","from":"start","runs":200,"ticks":1000,"until":"count(\"coin\") == 0 || count(\"hero\") == 0","metric":"count(\"hero\") > 0"}
+
+# 4. Balance tweak: make slimes hit 3x harder, and re-test
+{"cmd":"restore","name":"start"}
+{"cmd":"exec","code":"for s in find(\"slime\") { set(s.id, \"dmg\", 3); } find(\"slime\").map(|s| s.dmg)"}
+{"cmd":"snapshot","name":"hard"}
+{"cmd":"trials","from":"hard","runs":200,"ticks":1000,"until":"count(\"coin\") == 0 || count(\"hero\") == 0","metric":"count(\"hero\") > 0"}
+
+# 5. Live-edit behavior: the hero now avoids coins that have a slime nearby
+{"cmd":"script","name":"hero","code":"fn tick(me) {\n  let h = get(me);\n  let best = (); let bd = 1000000;\n  for c in find(\"coin\") {\n    let danger = near(c.x, c.y, 2).filter(|e| e.kind == \"slime\").len();\n    let d = path_len(h.x, h.y, c.x, c.y) + danger * 20;\n    if d >= 0 && d < bd { bd = d; best = c; }\n  }\n  if best == () { return; }\n  move_toward(me, best.x, best.y);\n  let h = get(me);\n  for e in at(h.x, h.y) {\n    if e.kind == \"coin\" { destroy(e.id); set(me, \"gold\", h.gold + 1); emit(\"coin_picked\", #{ gold: h.gold + 1 }); }\n  }\n}"}
+{"cmd":"snapshot","name":"hard_smart"}
+{"cmd":"trials","from":"hard_smart","runs":200,"ticks":1000,"until":"count(\"coin\") == 0 || count(\"hero\") == 0","metric":"count(\"hero\") > 0"}
+
+# 6. Errors come back as data, not crashes
+{"cmd":"script","name":"broken","code":"fn tick(me) { let x = ; }"}
+{"cmd":"exec","code":"move_by(999, 1, 0)"}

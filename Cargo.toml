@@ -1,0 +1,10 @@
+[package]
+name = "forge"
+version = "0.1.0"
+edition = "2021"
+description = "An agent-native 2D game engine: text worlds, a JSON-lines protocol, scripts that run in the engine loop."
+
+[dependencies]
+rhai = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }

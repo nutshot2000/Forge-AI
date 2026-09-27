@@ -1,0 +1,45 @@
+# Builds worlds/coin-dash entirely through forge commands (the same ones an agent uses).
+{"cmd": "new", "map": ["##########################", "#........................#", "#.,,,...............#....#", "#.,,,...............#....#", "#....~~~~...........#....#", "#....~~~~....#####..#....#", "#....~~~~....#......#....#", "#............#...........#", "#............#...........#", "#............#...........#", "#..######.......,,,,,,,..#", "#...............,,,,,~~..#", "#...............,,,,,~~..#", "#........................#", "##########################"], "seed": 7}
+{"cmd": "sprite", "name": "knight", "palette": {"h": "#c9d1d9", "v": "#2d333b", "b": "#4a78e0", "l": "#2b3a67", "y": "#f5c542"}, "pixels": ["..hhhh..", ".hhhhhh.", ".hvvvvh.", ".hhhhhh.", "ybbbbbby", "y.bbbb..", "..b..b..", "..l..l.."]}
+{"cmd": "sprite", "name": "slime", "palette": {"g": "#5fd35f", "d": "#3a9a3a", "w": "#ffffff", "k": "#10200f"}, "pixels": ["........", "...gg...", "..gggg..", ".gwggwg.", ".gkggkg.", "gggggggg", "gddddddg", ".gggggg."]}
+{"cmd": "sprite", "name": "coin", "palette": {"y": "#f5c542", "o": "#d99a1e", "w": "#fff4c2"}, "pixels": ["........", "..yyyy..", ".yowyyy.", ".yoyyoy.", ".yoyyoy.", ".yooooy.", "..yyyy..", "........"]}
+{"cmd": "sprite", "name": "brick", "palette": {"r": "#5a4a42", "m": "#2e2a2a", "h": "#6e5a50"}, "pixels": ["hhhmhhhh", "rrrmrrrr", "mmmmmmmm", "hhhhhhmh", "rrrrrrmr", "mmmmmmmm", "hmhhhhhh", "rmrrrrrr"]}
+{"cmd": "sprite", "name": "water", "palette": {"b": "#1e4f8a", "l": "#2f6db3", "w": "#8ec5ff"}, "pixels": ["bbbbbbbb", "bblllbbb", "blwwlbbb", "bbbbbbbb", "bbbbblll", "bbbblwwl", "bbbbbbbb", "bbbbbbbb"]}
+{"cmd": "sprite", "name": "grass", "palette": {"g": "#1b3a22", "l": "#2c5a33"}, "pixels": ["gggggggg", "gglggggg", "gggggglg", "gggggggg", "glgggggg", "ggggglgg", "gggggggg", "ggglgggg"]}
+{"cmd": "tile", "char": "#", "name": "brick wall", "solid": true, "sprite": "brick"}
+{"cmd": "tile", "char": "~", "name": "water", "solid": true, "sprite": "water"}
+{"cmd": "tile", "char": ",", "name": "grass", "solid": false, "sprite": "grass"}
+{"cmd": "script", "name": "player", "code": "// Arrow keys or WASD move the hero one tile per tick.\nfn tick(me) {\n    let p = get(me);\n    if p.hp <= 0 { return; }\n    let dx = 0;\n    let dy = 0;\n    if key(\"left\") || key(\"a\") { dx = -1; }\n    else if key(\"right\") || key(\"d\") { dx = 1; }\n    else if key(\"up\") || key(\"w\") { dy = -1; }\n    else if key(\"down\") || key(\"s\") { dy = 1; }\n    if dx != 0 || dy != 0 { move_by(me, dx, dy); }\n    let p = get(me);\n    for e in at(p.x, p.y) {\n        if e.kind == \"coin\" {\n            destroy(e.id);\n            set(me, \"gold\", p.gold + 1);\n            emit(\"coin_picked\", #{ x: p.x, y: p.y });\n        }\n    }\n}\n"}
+{"cmd": "script", "name": "slime", "code": "// Chase the hero when it's in sight, otherwise wander. Bites on contact, then cools down.\nfn tick(me) {\n    let s = get(me);\n    let heroes = find(\"hero\");\n    if heroes.is_empty() { return; }\n    let h = heroes[0];\n    if s.cooldown > 0 { set(me, \"cooldown\", s.cooldown - 1); }\n    let dist = abs(h.x - s.x) + abs(h.y - s.y);\n    if dist <= 1 && s.cooldown == 0 && h.hp > 0 {\n        set(h.id, \"hp\", h.hp - s.dmg);\n        set(me, \"cooldown\", 4);\n        emit(\"hit\", #{ x: h.x, y: h.y, hp: h.hp - s.dmg });\n        return;\n    }\n    // Slimes are slow: they only move every other tick.\n    if now() % 2 == 0 { return; }\n    if dist <= s.sight {\n        move_toward(me, h.x, h.y);\n    } else {\n        let d = [[1, 0], [-1, 0], [0, 1], [0, -1]][rand(4)];\n        move_by(me, d[0], d[1]);\n    }\n}\n"}
+{"cmd": "script", "name": "rules", "code": "// Runs once per tick after every entity: HUD, winning and losing.\nfn rules() {\n    let hs = find(\"hero\");\n    if hs.is_empty() { return; }\n    let h = hs[0];\n    let hearts = \"\";\n    for i in 0..h.hp { hearts += \"♥\"; }\n    hud(\"hp\", \"HP   \" + hearts);\n    hud(\"gold\", \"Gold \" + h.gold + \" / \" + state(\"total\", 0));\n    if h.hp <= 0 && !state(\"over\", false) {\n        set_state(\"over\", true);\n        hud(\"msg\", \"GAME OVER · press Undo to try again\");\n        emit(\"game_over\");\n    }\n    if count(\"coin\") == 0 && !state(\"won\", false) {\n        set_state(\"won\", true);\n        hud(\"msg\", \"YOU WIN! Every coin collected\");\n        emit(\"win\");\n    }\n}\n"}
+{"cmd": "prefab", "name": "hero", "props": {"kind": "hero", "script": "player", "sprite": "knight", "hp": 5, "gold": 0, "z": 3, "tags": ["player"]}}
+{"cmd": "prefab", "name": "slime", "props": {"kind": "slime", "script": "slime", "sprite": "slime", "dmg": 1, "sight": 6, "cooldown": 0, "z": 2, "tags": ["enemy"]}}
+{"cmd": "prefab", "name": "coin", "props": {"kind": "coin", "sprite": "coin", "tags": ["pickup"]}}
+{"cmd": "create", "prefab": "hero", "x": 2, "y": 7}
+{"cmd": "create", "prefab": "slime", "x": 11, "y": 3}
+{"cmd": "create", "prefab": "slime", "x": 22, "y": 8}
+{"cmd": "create", "prefab": "slime", "x": 10, "y": 12}
+{"cmd": "create", "prefab": "coin", "x": 3, "y": 3}
+{"cmd": "create", "prefab": "coin", "x": 7, "y": 8}
+{"cmd": "create", "prefab": "coin", "x": 11, "y": 7}
+{"cmd": "create", "prefab": "coin", "x": 16, "y": 3}
+{"cmd": "create", "prefab": "coin", "x": 23, "y": 2}
+{"cmd": "create", "prefab": "coin", "x": 18, "y": 11}
+{"cmd": "create", "prefab": "coin", "x": 4, "y": 12}
+{"cmd": "create", "prefab": "coin", "x": 24, "y": 13}
+{"cmd": "create", "prefab": "coin", "x": 15, "y": 8}
+{"cmd": "create", "prefab": "coin", "x": 9, "y": 2}
+{"cmd": "exec", "code": "set_state(\"total\", count(\"coin\")); hud(\"msg\", \"Arrow keys / WASD to move · grab every coin\"); count(\"coin\")"}
+{"cmd": "view"}
+{"cmd": "save", "path": "worlds/coin-dash"}
+{"cmd": "snapshot", "name": "start"}
+{"cmd": "input", "down": "right"}
+{"cmd": "step", "ticks": 3}
+{"cmd": "input", "up": "right"}
+{"cmd": "input", "tap": "up"}
+{"cmd": "step", "ticks": 1}
+{"cmd": "get", "id": 1}
+{"cmd": "look"}
+{"cmd": "undo"}
+{"cmd": "restore", "name": "start"}
+{"cmd": "get", "id": 1}

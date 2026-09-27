@@ -1,0 +1,344 @@
+{
+  "tick": 0,
+  "rng": 7,
+  "next_id": 15,
+  "map": [
+    "##########################",
+    "#........................#",
+    "#.,,,...............#....#",
+    "#.,,,...............#....#",
+    "#....~~~~...........#....#",
+    "#....~~~~....#####..#....#",
+    "#....~~~~....#......#....#",
+    "#............#...........#",
+    "#............#...........#",
+    "#............#...........#",
+    "#..######.......,,,,,,,..#",
+    "#...............,,,,,~~..#",
+    "#...............,,,,,~~..#",
+    "#........................#",
+    "##########################"
+  ],
+  "vars": {
+    "total": 10
+  },
+  "entities": {
+    "1": {
+      "kind": "hero",
+      "x": 2,
+      "y": 7,
+      "script": "player",
+      "gold": 0,
+      "hp": 5,
+      "prefab": "hero",
+      "sprite": "knight",
+      "tags": [
+        "player"
+      ],
+      "z": 3
+    },
+    "2": {
+      "kind": "slime",
+      "x": 11,
+      "y": 3,
+      "script": "slime",
+      "cooldown": 0,
+      "dmg": 1,
+      "prefab": "slime",
+      "sight": 6,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "z": 2
+    },
+    "3": {
+      "kind": "slime",
+      "x": 22,
+      "y": 8,
+      "script": "slime",
+      "cooldown": 0,
+      "dmg": 1,
+      "prefab": "slime",
+      "sight": 6,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "z": 2
+    },
+    "4": {
+      "kind": "slime",
+      "x": 10,
+      "y": 12,
+      "script": "slime",
+      "cooldown": 0,
+      "dmg": 1,
+      "prefab": "slime",
+      "sight": 6,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "z": 2
+    },
+    "5": {
+      "kind": "coin",
+      "x": 3,
+      "y": 3,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "6": {
+      "kind": "coin",
+      "x": 7,
+      "y": 8,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "7": {
+      "kind": "coin",
+      "x": 11,
+      "y": 7,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "8": {
+      "kind": "coin",
+      "x": 16,
+      "y": 3,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "9": {
+      "kind": "coin",
+      "x": 23,
+      "y": 2,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "10": {
+      "kind": "coin",
+      "x": 18,
+      "y": 11,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "11": {
+      "kind": "coin",
+      "x": 4,
+      "y": 12,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "12": {
+      "kind": "coin",
+      "x": 24,
+      "y": 13,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "13": {
+      "kind": "coin",
+      "x": 15,
+      "y": 8,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "14": {
+      "kind": "coin",
+      "x": 9,
+      "y": 2,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    }
+  },
+  "tiles": {
+    "#": {
+      "name": "brick wall",
+      "solid": true,
+      "sprite": "brick"
+    },
+    ",": {
+      "name": "grass",
+      "solid": false,
+      "sprite": "grass"
+    },
+    "~": {
+      "name": "water",
+      "solid": true,
+      "sprite": "water"
+    }
+  },
+  "sprites": {
+    "brick": {
+      "palette": {
+        "h": "#6e5a50",
+        "m": "#2e2a2a",
+        "r": "#5a4a42"
+      },
+      "pixels": [
+        "hhhmhhhh",
+        "rrrmrrrr",
+        "mmmmmmmm",
+        "hhhhhhmh",
+        "rrrrrrmr",
+        "mmmmmmmm",
+        "hmhhhhhh",
+        "rmrrrrrr"
+      ]
+    },
+    "coin": {
+      "palette": {
+        "o": "#d99a1e",
+        "w": "#fff4c2",
+        "y": "#f5c542"
+      },
+      "pixels": [
+        "........",
+        "..yyyy..",
+        ".yowyyy.",
+        ".yoyyoy.",
+        ".yoyyoy.",
+        ".yooooy.",
+        "..yyyy..",
+        "........"
+      ]
+    },
+    "grass": {
+      "palette": {
+        "g": "#1b3a22",
+        "l": "#2c5a33"
+      },
+      "pixels": [
+        "gggggggg",
+        "gglggggg",
+        "gggggglg",
+        "gggggggg",
+        "glgggggg",
+        "ggggglgg",
+        "gggggggg",
+        "ggglgggg"
+      ]
+    },
+    "knight": {
+      "palette": {
+        "b": "#4a78e0",
+        "h": "#c9d1d9",
+        "l": "#2b3a67",
+        "v": "#2d333b",
+        "y": "#f5c542"
+      },
+      "pixels": [
+        "..hhhh..",
+        ".hhhhhh.",
+        ".hvvvvh.",
+        ".hhhhhh.",
+        "ybbbbbby",
+        "y.bbbb..",
+        "..b..b..",
+        "..l..l.."
+      ]
+    },
+    "slime": {
+      "palette": {
+        "d": "#3a9a3a",
+        "g": "#5fd35f",
+        "k": "#10200f",
+        "w": "#ffffff"
+      },
+      "pixels": [
+        "........",
+        "...gg...",
+        "..gggg..",
+        ".gwggwg.",
+        ".gkggkg.",
+        "gggggggg",
+        "gddddddg",
+        ".gggggg."
+      ]
+    },
+    "water": {
+      "palette": {
+        "b": "#1e4f8a",
+        "l": "#2f6db3",
+        "w": "#8ec5ff"
+      },
+      "pixels": [
+        "bbbbbbbb",
+        "bblllbbb",
+        "blwwlbbb",
+        "bbbbbbbb",
+        "bbbbblll",
+        "bbbblwwl",
+        "bbbbbbbb",
+        "bbbbbbbb"
+      ]
+    }
+  },
+  "prefabs": {
+    "coin": {
+      "kind": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ]
+    },
+    "hero": {
+      "gold": 0,
+      "hp": 5,
+      "kind": "hero",
+      "script": "player",
+      "sprite": "knight",
+      "tags": [
+        "player"
+      ],
+      "z": 3
+    },
+    "slime": {
+      "cooldown": 0,
+      "dmg": 1,
+      "kind": "slime",
+      "script": "slime",
+      "sight": 6,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "z": 2
+    }
+  },
+  "hud": {
+    "msg": "Arrow keys / WASD to move · grab every coin"
+  }
+}

@@ -1,0 +1,102 @@
+//! Minimal MCP server over stdio. The whole command protocol is exposed as one
+//! batched `forge` tool, so a single call can load, edit, simulate and inspect.
+
+use crate::app::{App, HELP};
+use serde_json::{json, Value};
+
+const INSTRUCTIONS: &str = "forge is a text-native 2D game engine, and you are the user's right arm in it. \
+Use the `forge` tool with a batch of commands, batching as much as you can per call. Start with {\"cmd\":\"look\"}: \
+it shows the map, what the user has selected or is hovering (so 'this' / 'here' resolve), assets and recent activity. \
+Build with new/paint/tile/sprite/prefab/create/script; test with snapshot -> step/trials -> diff -> tweak; \
+drive the editor with ui (select, open scripts, switch tools), talk with say, show places with point. Everything is undoable.";
+
+fn tool_def() -> Value {
+    let help: Value = serde_json::from_str(HELP).unwrap();
+    json!({
+        "name": "forge",
+        "description": format!(
+            "Run a batch of forge engine commands in order against the live world (state persists between calls). \
+             Stops at the first failing command unless keep_going is true. Reference:\n{}",
+            serde_json::to_string(&help).unwrap()
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "commands": {
+                    "type": "array",
+                    "description": "Command objects, e.g. [{\"cmd\":\"load\",\"path\":\"worlds/dungeon\"},{\"cmd\":\"view\"}]",
+                    "items": { "type": "object", "properties": { "cmd": { "type": "string" } }, "required": ["cmd"] }
+                },
+                "keep_going": { "type": "boolean", "description": "Continue after a failed command (default false)." }
+            },
+            "required": ["commands"]
+        }
+    })
+}
+
+/// One line per command result. `view` rows are printed as a real text block.
+fn render(resp: &Value) -> String {
+    let mut r = resp.clone();
+    let Some(rows) = r.as_object_mut().and_then(|m| m.remove("rows")) else {
+        return resp.to_string();
+    };
+    let grid: Vec<&str> = rows.as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    format!("{r}\n{}", grid.join("\n"))
+}
+
+fn call(app: &mut App, params: &Value) -> Value {
+    let name = params["name"].as_str().unwrap_or("");
+    if name != "forge" {
+        return json!({ "isError": true, "content": [{ "type": "text", "text": format!("unknown tool '{name}'") }] });
+    }
+    let args = &params["arguments"];
+    let Some(cmds) = args["commands"].as_array() else {
+        return json!({ "isError": true, "content": [{ "type": "text", "text": "'commands' must be an array" }] });
+    };
+    let keep_going = args["keep_going"].as_bool().unwrap_or(false);
+    let mut lines = vec![];
+    let mut failed = false;
+    for (i, c) in cmds.iter().enumerate() {
+        let resp = app.run(c, "agent");
+        let ok = resp["ok"] == json!(true);
+        lines.push(render(&resp));
+        if !ok {
+            failed = true;
+            if !keep_going && i + 1 < cmds.len() {
+                lines.push(format!("(stopped: skipped {} remaining command(s))", cmds.len() - i - 1));
+                break;
+            }
+        }
+    }
+    json!({ "isError": failed, "content": [{ "type": "text", "text": lines.join("\n") }] })
+}
+
+/// Handles one JSON-RPC line; returns the response to send, if any.
+pub fn handle_line(app: &mut App, line: &str) -> Option<Value> {
+    let Ok(msg) = serde_json::from_str::<Value>(line) else {
+        return Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "parse error" } }));
+    };
+    // Notifications (no id) and responses need no reply.
+    let (Some(id), Some(method)) = (msg.get("id").cloned(), msg["method"].as_str()) else {
+        return None;
+    };
+    let reply = match method {
+        "initialize" => Ok(json!({
+            "protocolVersion": msg["params"]["protocolVersion"].as_str().unwrap_or("2025-06-18"),
+            "capabilities": { "tools": {} },
+            "serverInfo": { "name": "forge", "version": env!("CARGO_PKG_VERSION") },
+            "instructions": match app.editor_url() {
+                Some(url) => format!("{INSTRUCTIONS} The user can watch and edit the same world live in the forge editor at {url}; everything you do shows up there, tagged as agent."),
+                None => INSTRUCTIONS.to_string(),
+            },
+        })),
+        "ping" => Ok(json!({})),
+        "tools/list" => Ok(json!({ "tools": [tool_def()] })),
+        "tools/call" => Ok(call(app, &msg["params"])),
+        _ => Err(json!({ "code": -32601, "message": format!("method not found: {method}") })),
+    };
+    Some(match reply {
+        Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+        Err(error) => json!({ "jsonrpc": "2.0", "id": id, "error": error }),
+    })
+}

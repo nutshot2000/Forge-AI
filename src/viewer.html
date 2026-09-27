@@ -1,0 +1,1284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23151821'/%3E%3Crect x='10' y='10' width='44' height='44' rx='6' fill='none' stroke='%237aa2ff' stroke-width='5'/%3E%3Crect x='24' y='24' width='16' height='16' rx='4' fill='%23b48cff'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0d0f14; --panel: #151821; --panel2: #1a1e29; --line: #262b38; --text: #d9dde8; --dim: #7d8599;
+    --accent: #7aa2ff; --agent: #b48cff; --you: #5fd39a; --warn: #f0b35a; --bad: #ff6b6b;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, "Segoe UI", sans-serif; overflow: hidden; }
+  button, select, input, textarea { font: inherit; color: var(--text); }
+  button, select { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover:not(:disabled), select:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.on { background: #24304f; border-color: var(--accent); }
+  input, textarea { background: #0f1117; border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+
+  .app { display: grid; height: 100vh; grid-template-rows: 46px 1fr 260px; grid-template-columns: 230px 1fr 300px;
+         grid-template-areas: "top top top" "scene view insp" "scene bottom insp"; }
+  header { grid-area: top; display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; overflow-x: auto; }
+  .logo { font: 700 14px var(--mono); letter-spacing: .12em; color: var(--accent); margin-right: 6px; }
+  .path { color: var(--dim); font: 12px var(--mono); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; flex: none; }
+  .tick { font: 12px var(--mono); color: var(--dim); } .tick b { color: var(--text); }
+  .spacer { flex: 1; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); transition: all .3s; }
+  .pill.live { color: var(--agent); border-color: var(--agent); box-shadow: 0 0 12px #b48cff55; }
+
+  .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .panel h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 0; padding: 10px 12px 6px; }
+  .scroll { overflow: auto; min-height: 0; flex: 1; }
+  #scene { grid-area: scene; border-right: 1px solid var(--line); }
+  #insp { grid-area: insp; border-left: 1px solid var(--line); }
+
+  .group { padding: 4px 12px 2px; color: var(--dim); font-size: 12px; user-select: none; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 3px 12px 3px 22px; cursor: pointer; font-size: 12.5px; }
+  .item:hover { background: #1c2130; }
+  .item.sel { background: #22304f; }
+  .item.agentsel { box-shadow: inset 3px 0 var(--agent); }
+  .item .pos { margin-left: auto; color: var(--dim); font: 11px var(--mono); }
+  .sw { width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; font: 700 10px var(--mono); color: #0d0f14; flex: none; image-rendering: pixelated; }
+  canvas.sw { background: transparent; }
+
+  #view { grid-area: view; position: relative; background: #0a0c10; min-height: 0; min-width: 0; display: grid; place-items: center; overflow: hidden; }
+  #view.gamefocus { box-shadow: inset 0 0 0 2px var(--you); }
+  #c { display: block; border-radius: 4px; box-shadow: 0 10px 40px #0008; image-rendering: pixelated; }
+  .tools { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+  .tools > * { pointer-events: auto; }
+  .tools .box { display: flex; gap: 4px; align-items: center; background: #151821e6; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+  .tools button, .tools select { padding: 3px 9px; font-size: 12px; }
+  .banner { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: #0f2a1ee6; color: var(--you); border: 1px solid var(--you); border-radius: 99px; padding: 3px 14px; font-size: 12px; display: none; }
+  .replay { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; align-items: center; background: #151821ee; border: 1px solid var(--warn); color: var(--warn); border-radius: 99px; padding: 4px 6px 4px 14px; font-size: 12px; }
+  .hint { position: absolute; bottom: 10px; right: 12px; color: #4b5266; font-size: 11px; }
+  #empty { color: var(--dim); }
+  #toasts { position: absolute; right: 12px; bottom: 34px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; max-width: 60%; }
+  .toast { background: #1d1730f2; border: 1px solid var(--agent); color: #e9e0ff; border-radius: 10px; padding: 8px 12px; font-size: 13px; box-shadow: 0 6px 24px #0008; animation: pop .25s ease-out; }
+  .toast b { color: var(--agent); margin-right: 6px; }
+  @keyframes pop { from { transform: translateY(8px); opacity: 0; } }
+
+  #bottom { grid-area: bottom; border-top: 1px solid var(--line); }
+  .tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); }
+  .tabs button { border-radius: 6px 6px 0 0; border-bottom: none; background: transparent; }
+  .tabs button.on { background: var(--panel2); }
+  .tabs .right { margin-left: auto; font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+  .pane { display: none; flex: 1; min-height: 0; }
+  .pane.on { display: flex; }
+
+  #log { list-style: none; margin: 0; padding: 4px 0; font: 12px var(--mono); }
+  #log li { padding: 2px 12px; display: flex; gap: 10px; }
+  #log li .t { color: #4b5266; min-width: 44px; text-align: right; flex: none; }
+  #log li.agent { color: var(--agent); } #log li.you { color: var(--you); } #log li.cli, #log li.engine { color: var(--accent); }
+  #log li.ev { color: var(--dim); } #log li.ev b { color: #b9c0d0; font-weight: 600; }
+  #log li.err { color: var(--bad); }
+  #log li.fresh { animation: flash 1.2s; }
+  @keyframes flash { from { background: #b48cff33; } to { background: transparent; } }
+
+  #scripts { flex-direction: row; }
+  #slist { width: 160px; border-right: 1px solid var(--line); overflow: auto; padding: 6px 0; flex: none; }
+  #slist .item { padding-left: 12px; }
+  #slist .item.err::after { content: "●"; color: var(--bad); margin-left: auto; }
+  .editor { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #code { flex: 1; resize: none; border: 0; border-radius: 0; padding: 10px 12px; font: 12.5px/1.5 var(--mono); tab-size: 2; background: #0f1117; white-space: pre; }
+  .ebar { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-top: 1px solid var(--line); font-size: 12px; }
+  #cstatus { color: var(--dim); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #cstatus.bad { color: var(--bad); } #cstatus.good { color: var(--you); } #cstatus.agent { color: var(--agent); }
+
+  #assets { flex-direction: column; overflow: auto; padding: 4px 12px 12px; gap: 4px; }
+  .agrid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 84px; cursor: pointer; font-size: 12px; }
+  .card:hover { border-color: var(--accent); }
+  .card canvas { image-rendering: pixelated; background: repeating-conic-gradient(#1b1f29 0 25%, #151821 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
+  .card .meta { color: var(--dim); font: 11px var(--mono); }
+  .ahead { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 10px 0 4px; }
+
+  #console { flex-direction: column; }
+  #cout { flex: 1; overflow: auto; margin: 0; padding: 8px 12px; font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; color: #b9c0d0; }
+  #cout .in { color: var(--accent); } #cout .bad { color: var(--bad); }
+  #cin { margin: 6px 8px 8px; font-family: var(--mono); }
+
+  .field { display: grid; grid-template-columns: 78px 1fr auto; gap: 6px; align-items: center; padding: 3px 12px; }
+  .field label { color: var(--dim); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+  .field input, .field select { width: 100%; min-width: 0; font: 12px var(--mono); padding: 3px 6px; }
+  .field .x { padding: 1px 7px; color: var(--dim); background: none; border-color: transparent; }
+  .field .x:hover { color: var(--bad); }
+  .ihead { display: flex; align-items: center; gap: 10px; padding: 6px 12px 10px; }
+  .ihead .sw { width: 32px; height: 32px; font-size: 15px; border-radius: 7px; }
+  .ihead .name { font-weight: 600; } .ihead .id { color: var(--dim); font: 12px var(--mono); }
+  .iactions { display: flex; gap: 6px; padding: 10px 12px; flex-wrap: wrap; }
+  .danger:hover { border-color: var(--bad) !important; color: var(--bad); }
+  .muted { color: var(--dim); padding: 6px 12px; font-size: 12px; }
+  .sub { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); padding: 12px 12px 4px; }
+  #tip { position: fixed; pointer-events: none; background: #000d; border: 1px solid var(--line); padding: 4px 8px; border-radius: 5px; display: none; font: 12px var(--mono); z-index: 10; }
+
+  .menu { position: fixed; z-index: 20; min-width: 210px; background: #1a1e29; border: 1px solid #323849; border-radius: 8px; padding: 4px; box-shadow: 0 12px 32px #000a; font-size: 13px; }
+  .menu .mh { color: var(--dim); font-size: 11px; padding: 4px 10px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .menu div.mi { padding: 5px 10px; border-radius: 5px; cursor: pointer; display: flex; gap: 8px; }
+  .menu div.mi:hover { background: #24304f; }
+  .menu div.mi.ask { color: var(--agent); }
+  .menu div.mi.danger:hover { background: #3a1d24; color: var(--bad); }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .modal-bg { position: fixed; inset: 0; background: #0008; z-index: 30; display: grid; place-items: center; }
+  .modal { background: var(--panel); border: 1px solid #323849; border-radius: 12px; padding: 16px; width: min(460px, 92vw); box-shadow: 0 20px 60px #000c; }
+  .modal h3 { margin: 0 0 4px; font-size: 14px; } .modal p { margin: 0 0 10px; color: var(--dim); font-size: 12px; }
+  .modal textarea, .modal input { width: 100%; font-size: 13px; }
+  .modal textarea { min-height: 70px; resize: vertical; }
+  .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .modal .primary { background: #2a3a66; border-color: var(--accent); }
+  #drop { position: fixed; inset: 0; z-index: 25; display: none; place-items: center; background: #7aa2ff22; border: 3px dashed var(--accent); font-size: 18px; color: var(--text); pointer-events: none; }
+  #reqs { list-style: none; margin: 0; padding: 6px 0; }
+  #reqs li { padding: 6px 12px; border-bottom: 1px solid #1c1f28; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; cursor: pointer; }
+  #reqs li:hover { background: #1c2130; }
+  #reqs .st { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--warn); color: var(--warn); }
+  #reqs .done .st { border-color: var(--you); color: var(--you); } #reqs .declined .st { border-color: var(--dim); color: var(--dim); }
+  #reqs .rtext { font-size: 13px; } #reqs .reply { color: var(--agent); font-size: 12px; margin-top: 2px; }
+  #reqs .about { color: var(--dim); font: 11px var(--mono); }
+  .badge { background: var(--warn); color: #0d0f14; border-radius: 99px; font-size: 10px; padding: 0 6px; margin-left: 4px; font-weight: 700; }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .app { height: auto; grid-template-columns: 1fr; grid-template-rows: auto 60vh auto 300px auto;
+           grid-template-areas: "top" "view" "insp" "bottom" "scene"; }
+    #scene, #insp { border: 0; border-top: 1px solid var(--line); max-height: 45vh; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <span class="logo">FORGE</span>
+    <span class="path" id="path"></span>
+    <span class="sep"></span>
+    <button id="play" title="Run the game in real time (Space when paused, Esc to stop)">▶ Play</button>
+    <button id="step" title="Advance one tick (.)">⏭ Step</button>
+    <select id="tps" title="Ticks per second while playing">
+      <option>2</option><option>4</option><option selected>8</option><option>15</option><option>30</option><option>60</option>
+    </select>
+    <span class="tick">tick <b id="tick">–</b></span>
+    <span class="sep"></span>
+    <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button id="redo" title="Redo (Ctrl+Y)">↷</button>
+    <span class="sep"></span>
+    <button id="snap" title="Save the world state in memory">📸 Snapshot</button>
+    <select id="restore" title="Rewind to a snapshot"><option value="">⟲ Restore…</option></select>
+    <button id="save" title="Write world.json and scripts to disk">💾 Save</button>
+    <button id="import" title="Import images, maps, scripts or worlds (or drag files onto the editor)">📂 Import</button>
+    <button id="export" title="Download the world, map or sprites">⤓ Export</button>
+    <input type="file" id="file" multiple hidden accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.json,.tmj,.txt,.csv,.rhai">
+    <span class="spacer"></span>
+    <span class="pill" id="agent">🤖 agent idle</span>
+  </header>
+
+  <section class="panel" id="scene">
+    <h2>Scene</h2>
+    <div class="scroll" id="tree"></div>
+  </section>
+
+  <section id="view">
+    <div id="empty">Waiting for the engine…</div>
+    <canvas id="c" hidden></canvas>
+    <div class="tools">
+      <div class="box">
+        <button data-tool="select" class="on" title="Select / drag (V)">↖ Select</button>
+        <button data-tool="paint" title="Paint tiles (B)">🖌 Paint</button>
+        <select id="ptile" title="Tile to paint"></select>
+        <button data-tool="place" title="Place entity (P)">✚ Place</button>
+        <select id="place" title="What to place"></select>
+        <button data-tool="erase" title="Delete entity (E)">✖ Erase</button>
+      </div>
+    </div>
+    <div class="banner" id="banner">🎮 keyboard controls the game · Esc to stop</div>
+    <div class="replay" id="replay"><span id="behind"></span><button id="live">Jump to live</button></div>
+    <div id="toasts"></div>
+    <div class="hint" id="hint">Click anything, even walls · Shift+drag paints a box · Space play · . step · V B P E tools · Ctrl+Z undo</div>
+  </section>
+
+  <section class="panel" id="insp">
+    <h2>Inspector</h2>
+    <div class="scroll" id="inspector"><div class="muted">Click an entity in the viewport or scene list.</div></div>
+  </section>
+
+  <section class="panel" id="bottom">
+    <div class="tabs">
+      <button data-tab="activity" class="on">Activity</button>
+      <button data-tab="scripts">Scripts</button>
+      <button data-tab="requests">Requests<span class="badge" id="rbadge" hidden></span></button>
+      <button data-tab="assets">Assets</button>
+      <button data-tab="console">Console</button>
+      <span class="right"><label><input type="checkbox" id="showev" checked> tick events</label></span>
+    </div>
+    <div class="pane scroll on" id="activity"><ul id="log"></ul></div>
+    <div class="pane" id="scripts">
+      <div id="slist"></div>
+      <div class="editor">
+        <textarea id="code" spellcheck="false" placeholder="Pick a script, or create one with + New"></textarea>
+        <div class="ebar">
+          <button id="ssave" title="Compile and install (Ctrl+S)">Save script</button>
+          <span id="cstatus"></span>
+        </div>
+      </div>
+    </div>
+    <div class="pane scroll" id="requests"><ul id="reqs"></ul></div>
+    <div class="pane" id="assets"></div>
+    <div class="pane" id="console">
+      <pre id="cout">Type Rhai code to run against the live world, e.g.  count("coin")
+or a JSON command, e.g.  {"cmd":"step","ticks":50}
+</pre>
+      <input id="cin" placeholder="> Rhai code or {JSON command}" autocomplete="off">
+    </div>
+  </section>
+</div>
+<div id="tip"></div>
+<div id="drop">Drop images (→ sprites), maps (.txt .csv .tmj), scripts (.rhai) or worlds (.json)</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('c');
+let ctx = cv.getContext('2d');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const typing = () => /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+
+// ---------- engine API ----------
+async function cmd(c) {
+  try {
+    const d = await (await fetch('/api/cmd', { method: 'POST', body: JSON.stringify(c) })).json();
+    refreshSoon();
+    return d;
+  } catch (e) { return { ok: false, error: 'engine unreachable' }; }
+}
+
+// ---------- editor state ----------
+let es = null, esKey = '', refreshTimer = null, firstState = true;
+function refreshSoon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 50); }
+async function refresh() {
+  try {
+    const d = await (await fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'editor_state' }) })).json();
+    if (!d.ok) return;
+    // The engine was replaced by a newer build: reload to get its editor.
+    if (d.build) { if (window.forgeBuild && window.forgeBuild !== d.build) return location.reload(); window.forgeBuild = d.build; }
+    const key = JSON.stringify(d);
+    if (key === esKey) return;
+    esKey = key; es = d;
+    renderAll();
+    firstState = false;
+  } catch (e) {}
+}
+setInterval(refresh, 350);
+
+// ---------- shared UI state (the agent can drive this) ----------
+let uiRev = -1, selected = null, tool = 'select';
+async function pushUi(patch) {
+  const r = await cmd({ cmd: 'ui', ...patch });
+  if (r.ok) uiRev = Math.max(uiRev, r.ui.rev);
+}
+function applyUi(ui) {
+  if (ui.rev <= uiRev) return;
+  const byAgent = ui.by !== 'you';
+  uiRev = ui.rev;
+  if (!byAgent && !firstState) return;  // our own echo
+  if (selected !== ui.selected) { selected = ui.selected; inspKey = ''; treeKey = ''; if (byAgent) agentSel = performance.now(); }
+  const uc = ui.cell ? { x: ui.cell[0], y: ui.cell[1] } : null;
+  if (JSON.stringify(uc) !== JSON.stringify(selCell)) { selCell = uc; inspKey = ''; }
+  setTool(ui.tool, false);
+  if (ui.paint_tile) $('ptile').value = ui.paint_tile;
+  if (ui.place) $('place').value = ui.place;
+  if (ui.tab) showTab(ui.tab, false);
+  if (ui.script && ui.script !== curScript && es.scripts[ui.script] !== undefined && !dirty) openScript(ui.script, false);
+}
+let agentSel = -1e9;
+
+// ---------- notices from the agent: say / point ----------
+let noticeSeq = null, markers = [];
+function applyNotices(list) {
+  const max = list.reduce((m, n) => Math.max(m, n.seq), 0);
+  if (noticeSeq === null) { noticeSeq = max; return; }  // don't replay old ones on load
+  for (const n of list) {
+    if (n.seq <= noticeSeq) continue;
+    if (n.kind === 'say') toast(n.text, n.by);
+    if (n.kind === 'point') markers.push({ x: n.x, y: n.y, label: n.label, t0: performance.now() });
+  }
+  noticeSeq = Math.max(noticeSeq, max);
+}
+function toast(text, by) {
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `<b>${by === 'agent' ? '🤖' : '💬'}</b><span></span>`; t.lastChild.textContent = text;
+  $('toasts').append(t);
+  setTimeout(() => { t.style.transition = 'opacity .5s'; t.style.opacity = 0; setTimeout(() => t.remove(), 500); }, 4000 + text.length * 60);
+  while ($('toasts').children.length > 4) $('toasts').firstChild.remove();
+}
+
+// ---------- frames (animation + activity) ----------
+let maps = {}, queue = [], cur = null, prev = null, fetched = 0, first = true, lastAdvance = 0;
+let pulses = [], TS = 24, lastAgent = -1e9;
+
+async function poll() {
+  try {
+    const d = await (await fetch('/frames?after=' + fetched)).json();
+    if (d.latest < fetched) { fetched = 0; queue = []; cur = null; }  // engine restarted
+    Object.assign(maps, d.maps);
+    if (d.frames.length) {
+      fetched = d.frames[d.frames.length - 1].seq;
+      queue.push(...d.frames);
+      if (first) {
+        for (const f of queue.slice(-400)) if (f.note) logNote(f, false);
+        cur = queue[queue.length - 1]; queue = [];
+      }
+    }
+    first = false;
+  } catch (e) {}
+  setTimeout(poll, 100);
+}
+function replaySpeed() {
+  const backlog = queue.length;
+  return backlog > 200 ? 60 : backlog > 40 ? 30 : Math.max(15, es && es.playing ? +es.tps : 15);
+}
+function advance(now) {
+  if (!queue.length || now - lastAdvance < 1000 / replaySpeed()) return;
+  show(queue.shift());
+  lastAdvance = now;
+}
+function show(f, jumped) {
+  prev = (jumped || f.jump) ? null : cur;
+  cur = f;
+  if (f.note) logNote(f, true);
+  if ($('showev').checked) for (const ev of f.events || []) logEvent(f.tick, ev);
+  for (const ev of f.events || []) addPulse(ev);
+}
+function addPulse(ev) {
+  const d = ev.data || {};
+  let x = d.x, y = d.y;
+  if (typeof x !== 'number') {
+    const id = d.target ?? d.id;
+    const e = cur && cur.ents.find(e => e[0] === id || (ev.kind === 'hit' && e[4] === 'hero'));
+    if (e) { x = e[2]; y = e[3]; }
+  }
+  if (typeof x === 'number' && typeof y === 'number') pulses.push({ x, y, t0: performance.now(), bad: /hit|death|damage|die|hurt/.test(ev.kind) });
+}
+
+// ---------- activity log ----------
+function addLog(cls, tick, html) {
+  const li = document.createElement('li');
+  li.className = cls;
+  li.innerHTML = `<span class="t">${tick}</span><span></span>`;
+  li.lastChild.innerHTML = html;
+  $('log').prepend(li);
+  while ($('log').children.length > 400) $('log').lastChild.remove();
+}
+function logNote(f, live) {
+  const [src] = f.note.split(' · ');
+  const icon = { agent: '🤖', you: '🧑', cli: '⌨', engine: '⚙' }[src] || '⚙';
+  const cls = (src in { agent: 1, you: 1, cli: 1 } ? src : 'engine') + (f.note.includes('✗') ? ' err' : '') + (live ? ' fresh' : '');
+  addLog(cls, f.tick, `${icon} ${esc(f.note)}`);
+  if (live && src === 'agent') lastAgent = performance.now();
+}
+function logEvent(tick, ev) {
+  const data = ev.data && typeof ev.data === 'object'
+    ? Object.entries(ev.data).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ') : (ev.data ?? '');
+  addLog(ev.kind === 'script_error' ? 'err' : 'ev', tick, `<b>${esc(ev.kind)}</b> ${esc(data)}`);
+}
+
+// ---------- sprites ----------
+const spriteCache = new Map();
+function spriteCanvas(name) {
+  const sp = es && es.sprites[name];
+  if (!sp) return null;
+  const key = name + JSON.stringify(sp);
+  let c = spriteCache.get(name);
+  if (c && c._key === key) return c;
+  const h = sp.pixels.length, w = Math.max(1, ...sp.pixels.map(r => [...r].length));
+  c = document.createElement('canvas'); c.width = w; c.height = h; c._key = key;
+  const g = c.getContext('2d');
+  sp.pixels.forEach((row, y) => [...row].forEach((ch, x) => {
+    const col = sp.palette[ch];
+    if (col && ch !== '.' && ch !== ' ') { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
+  }));
+  spriteCache.set(name, c);
+  return c;
+}
+function drawSprite(g, name, x, y, size) {
+  const c = spriteCanvas(name);
+  if (!c) return false;
+  const s = size / Math.max(c.width, c.height);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(c, x + (size - c.width * s) / 2, y + (size - c.height * s) / 2, c.width * s, c.height * s);
+  return true;
+}
+function hue(s) { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
+const colorOf = (kind, c) => c || `hsl(${hue(kind)} 68% 62%)`;
+function swatch(e) {
+  // A small preview: sprite if the entity has one, else colored glyph square.
+  if (e.sprite && spriteCanvas(e.sprite)) {
+    const c = document.createElement('canvas'); c.className = 'sw'; c.width = 32; c.height = 32;
+    drawSprite(c.getContext('2d'), e.sprite, 0, 0, 32);
+    return c;
+  }
+  const s = document.createElement('span'); s.className = 'sw';
+  s.style.background = colorOf(e.kind, e.color); s.textContent = (e.glyph || e.kind || '?')[0];
+  return s;
+}
+
+// ---------- drawing ----------
+let hover = null, drag = null, paint = null;
+
+function drawTile(ch, px, py, x, y) {
+  const def = es && es.tiles[ch];
+  if (def && def.sprite && spriteCanvas(def.sprite)) {
+    ctx.fillStyle = '#12141a'; ctx.fillRect(px, py, TS, TS);
+    drawSprite(ctx, def.sprite, px, py, TS);
+    return;
+  }
+  if (def && def.color) {
+    ctx.fillStyle = def.color; ctx.fillRect(px, py, TS, TS);
+    if (def.solid) { ctx.fillStyle = '#ffffff18'; ctx.fillRect(px, py, TS, Math.max(2, TS / 8)); }
+    return;
+  }
+  if (ch === '#') {
+    ctx.fillStyle = '#2c313d'; ctx.fillRect(px, py, TS, TS);
+    ctx.fillStyle = '#3a4152'; ctx.fillRect(px, py, TS, Math.max(2, TS / 8));
+    ctx.fillStyle = '#23272f'; ctx.fillRect(px, py + TS - 1, TS, 1);
+  } else if (ch === ' ') {
+    ctx.fillStyle = '#0a0c10'; ctx.fillRect(px, py, TS, TS);
+  } else {
+    ctx.fillStyle = (x + y) % 2 ? '#13151c' : '#12141a'; ctx.fillRect(px, py, TS, TS);
+    if (ch !== '.') {
+      ctx.fillStyle = '#4a5268'; ctx.font = `${TS * .7}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(ch, px + TS / 2, py + TS / 2);
+    }
+  }
+}
+
+function draw(now) {
+  advance(now);
+  requestAnimationFrame(draw);
+  if (!cur) return;
+  const rows = maps[cur.map] || [];
+  const W = Math.max(1, ...rows.map(r => r.length)), H = rows.length || 1;
+  const box = $('view').getBoundingClientRect();
+  TS = Math.max(6, Math.min(48, Math.floor(Math.min((box.width - 40) / W, (box.height - 100) / H))));
+  if (cv.width !== W * TS || cv.height !== H * TS) { cv.width = W * TS; cv.height = H * TS; }
+  $('empty').hidden = true; cv.hidden = false;
+
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let ch = rows[y][x] ?? ' ';
+    if (paint && paint.cells.has(x + ',' + y)) ch = paint.tile;
+    drawTile(ch, x * TS, y * TS, x, y);
+  }
+  if (selCell) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+    ctx.strokeRect(selCell.x * TS + 1, selCell.y * TS + 1, TS - 2, TS - 2); ctx.setLineDash([]);
+  }
+  if (hover && tool !== 'select') {
+    ctx.strokeStyle = tool === 'erase' ? '#ff6b6b' : '#7aa2ff'; ctx.lineWidth = 2;
+    ctx.strokeRect(hover.x * TS + 1, hover.y * TS + 1, TS - 2, TS - 2);
+  }
+
+  const t = prev ? Math.min(1, (now - lastAdvance) / (1000 / replaySpeed())) : 1;
+  const ease = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const before = new Map((prev ? prev.ents : []).map(e => [e[0], e]));
+  const ids = new Set(cur.ents.map(e => e[0]));
+  const ent = (e, x, y, a) => {
+    const px = x * TS, py = y * TS, r = TS * .42, cx = px + TS / 2, cy = py + TS / 2;
+    ctx.globalAlpha = a;
+    if (!(e[6] && drawSprite(ctx, e[6], px, py, TS))) {
+      ctx.fillStyle = colorOf(e[4], e[5]);
+      ctx.beginPath(); ctx.roundRect(cx - r, cy - r, r * 2, r * 2, r * .45); ctx.fill();
+      ctx.fillStyle = '#0d0f14'; ctx.font = `bold ${TS * .55}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e[1], cx, cy + 1);
+    }
+    if (e[0] === selected) {
+      const recent = now - agentSel < 1500;
+      ctx.strokeStyle = recent ? '#b48cff' : '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.roundRect(cx - r - 3, cy - r - 3, r * 2 + 6, r * 2 + 6, r * .5); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  };
+  for (const e of before.values()) if (!ids.has(e[0])) ent(e, e[2], e[3], 1 - ease);
+  for (const e of cur.ents) {
+    if (drag && drag.id === e[0]) continue;
+    const p = before.get(e[0]);
+    if (p) ent(e, p[2] + (e[2] - p[2]) * ease, p[3] + (e[3] - p[3]) * ease, 1);
+    else ent(e, e[2], e[3], prev ? ease : 1);
+  }
+  if (drag && hover) { const e = cur.ents.find(e => e[0] === drag.id); if (e) ent(e, hover.x, hover.y, .75); }
+
+  pulses = pulses.filter(p => now - p.t0 < 700);
+  for (const p of pulses) {
+    const k = (now - p.t0) / 700;
+    ctx.strokeStyle = p.bad ? `rgba(255,95,95,${1 - k})` : `rgba(255,215,110,${1 - k})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x * TS + TS / 2, p.y * TS + TS / 2, TS * (.45 + k * .9), 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // agent markers
+  markers = markers.filter(m => now - m.t0 < 6000);
+  for (const m of markers) {
+    const k = ((now - m.t0) % 1000) / 1000, fade = Math.min(1, (6000 - (now - m.t0)) / 800);
+    const cx = m.x * TS + TS / 2, cy = m.y * TS + TS / 2;
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = '#b48cff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, TS * (.55 + k * .6), 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#b48cff'; ctx.beginPath(); ctx.moveTo(cx, cy - TS * .55); ctx.lineTo(cx - 6, cy - TS * .55 - 12); ctx.lineTo(cx + 6, cy - TS * .55 - 12); ctx.fill();
+    if (m.label) {
+      ctx.font = 'bold 12px system-ui'; const w = ctx.measureText(m.label).width + 14;
+      const lx = Math.min(Math.max(cx - w / 2, 2), cv.width - w - 2), ly = Math.max(cy - TS * .55 - 34, 2);
+      ctx.fillStyle = '#1d1730f0'; ctx.beginPath(); ctx.roundRect(lx, ly, w, 20, 6); ctx.fill();
+      ctx.strokeStyle = '#b48cff'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#e9e0ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(m.label, lx + 7, ly + 10);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // open requests the user pinned for the agent
+  for (const r of (es ? es.requests : []).filter(r => r.status === 'open')) {
+    const at = r.entity && cur.ents.find(e => e[0] === r.entity.id);
+    const x = at ? at[2] : r.x, y = at ? at[3] : r.y;
+    const bx = x * TS + TS - 4, by = y * TS + 4, rr = Math.max(7, TS * .22);
+    ctx.fillStyle = '#f0b35a'; ctx.beginPath(); ctx.arc(bx, by, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0d0f14'; ctx.font = `bold ${rr * 1.3}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', bx, by + 1);
+  }
+
+  // HUD
+  const hud = Object.values(cur.hud || {});
+  if (hud.length) {
+    ctx.font = `bold ${Math.max(12, Math.min(18, TS * .6))}px ui-monospace, monospace`;
+    const lh = Math.max(16, Math.min(24, TS * .8));
+    const w = Math.max(...hud.map(s => ctx.measureText(s).width)) + 16;
+    ctx.fillStyle = '#000a'; ctx.beginPath(); ctx.roundRect(6, 6, w, hud.length * lh + 8, 6); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    hud.forEach((s, i) => ctx.fillText(s, 14, 10 + i * lh));
+  }
+
+  $('tick').textContent = cur.tick;
+  const behind = queue.length;
+  $('replay').style.display = behind > 3 ? 'flex' : 'none';
+  $('hint').style.display = behind > 3 ? 'none' : '';
+  $('behind').textContent = `▶ replaying · ${behind} ticks behind`;
+  const active = now - lastAgent < 2500;
+  $('agent').className = 'pill' + (active ? ' live' : '');
+  $('agent').textContent = active ? '🤖 agent working…' : '🤖 agent idle';
+  const gameKeys = es && es.playing && !typing();
+  $('banner').style.display = gameKeys ? 'block' : 'none';
+  $('view').classList.toggle('gamefocus', !!gameKeys);
+}
+
+// ---------- viewport interaction ----------
+function tileAt(ev) {
+  const b = cv.getBoundingClientRect();
+  return { x: Math.floor((ev.clientX - b.left) / TS), y: Math.floor((ev.clientY - b.top) / TS) };
+}
+const entsAt = p => cur ? cur.ents.filter(e => e[2] === p.x && e[3] === p.y).sort((a, b) => b[0] - a[0]) : [];
+
+cv.addEventListener('mousedown', ev => {
+  if (!cur || ev.button !== 0) return;
+  document.activeElement.blur();
+  const p = tileAt(ev), here = entsAt(p);
+  if (tool === 'select') {
+    if (here.length) { select(here[0][0]); drag = { id: here[0][0], from: p }; }
+    else selectCell(p);
+  } else if (tool === 'paint') {
+    paint = { tile: $('ptile').value || '#', cells: new Set([p.x + ',' + p.y]), rect: ev.shiftKey ? p : null };
+  } else if (tool === 'place') {
+    placeAt(p);
+  } else if (tool === 'erase' && here.length) {
+    cmd({ cmd: 'destroy', id: here[0][0] });
+  }
+});
+let hoverSent = '', hoverTimer = null;
+cv.addEventListener('mousemove', ev => {
+  if (!cur) return;
+  hover = tileAt(ev);
+  if (paint && paint.rect) {
+    paint.cells = new Set();
+    const [x0, x1] = [Math.min(paint.rect.x, hover.x), Math.max(paint.rect.x, hover.x)];
+    const [y0, y1] = [Math.min(paint.rect.y, hover.y), Math.max(paint.rect.y, hover.y)];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) paint.cells.add(x + ',' + y);
+  } else if (paint) paint.cells.add(hover.x + ',' + hover.y);
+  // Tell the engine where the user is pointing, so an agent can resolve "here".
+  const hk = hover.x + ',' + hover.y;
+  if (hk !== hoverSent) {
+    hoverSent = hk; clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'ui', hover: [hover.x, hover.y] }) }), 150);
+  }
+  const here = entsAt(hover), tip = $('tip');
+  if (!here.length || drag || paint) { tip.style.display = 'none'; return; }
+  tip.textContent = here.map(e => `#${e[0]} ${e[4]}`).join(', ') + `  (${hover.x},${hover.y})`;
+  tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY + 14 + 'px'; tip.style.display = 'block';
+});
+cv.addEventListener('mouseleave', () => { hover = null; $('tip').style.display = 'none'; });
+window.addEventListener('mouseup', () => {
+  if (drag) {
+    const p = hover;
+    if (p && (p.x !== drag.from.x || p.y !== drag.from.y))
+      cmd([{ cmd: 'set', id: drag.id, key: 'x', value: p.x }, { cmd: 'set', id: drag.id, key: 'y', value: p.y }]);
+    drag = null;
+  }
+  if (paint) {
+    const cells = [...paint.cells].map(s => s.split(',').map(Number));
+    const p = paint;
+    cmd({ cmd: 'paint', tile: p.tile, cells }).then(() => { if (paint === p) paint = null; });
+  }
+});
+
+async function placeAt(p) {
+  let v = $('place').value;
+  if (!v) return;
+  if (v === '__new') {
+    const kind = (prompt('New entity kind (e.g. "tree", "enemy"):') || '').trim();
+    if (!kind) return;
+    v = 'kind:' + kind;
+  }
+  const [type, name] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
+  let r;
+  if (type === 'prefab') r = await cmd({ cmd: 'create', prefab: name, x: p.x, y: p.y });
+  else {
+    const tpl = es && es.entities.find(e => e.kind === name), props = {};
+    if (tpl) for (const [k, val] of Object.entries(tpl)) if (!['id', 'kind', 'x', 'y'].includes(k)) props[k] = val;
+    r = await cmd({ cmd: 'create', kind: name, x: p.x, y: p.y, props });
+  }
+  if (r.ok) select(r.id);
+}
+
+function setTool(t, push = true) {
+  if (!t) return;
+  tool = t;
+  document.querySelectorAll('.tools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  cv.style.cursor = t === 'select' ? 'default' : 'crosshair';
+  if (push) pushUi({ tool: t });
+}
+document.querySelectorAll('.tools [data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+$('ptile').onchange = () => { setTool('paint'); pushUi({ tile: $('ptile').value }); };
+$('place').onchange = () => { setTool('place'); pushUi({ place: $('place').value }); };
+
+// ---------- scene tree + inspector ----------
+function select(id) {
+  selected = id; selCell = null; inspKey = ''; treeKey = '';
+  renderTree(); renderInspector();
+  pushUi({ selected: id, cell: null });
+}
+let selCell = null;
+function selectCell(p) {
+  selected = null; selCell = p; inspKey = ''; treeKey = '';
+  renderTree(); renderInspector();
+  pushUi({ cell: [p.x, p.y] });
+}
+const tileTypes = () => ({ '#': { name: 'wall', solid: true }, '.': { name: 'floor', solid: false }, ...(es ? es.tiles : {}) });
+
+function renderCellInspector(box) {
+  const p = selCell, rows = maps[cur.map] || [], ch = rows[p.y]?.[p.x];
+  if (ch === undefined) { box.innerHTML = '<div class="muted">That spot is outside the map.</div>'; return; }
+  const types = tileTypes(), def = types[ch] || { name: '', solid: false };
+  box.innerHTML = '';
+  const head = document.createElement('div'); head.className = 'ihead';
+  const c = document.createElement('canvas'); c.className = 'sw'; c.width = 32; c.height = 32;
+  { const save = [ctx, TS]; ctx = c.getContext('2d'); TS = 32; drawTile(ch, 0, 0, 0, 0); [ctx, TS] = save; }
+  const nm = document.createElement('div'); nm.innerHTML = '<div class="name"></div><div class="id"></div>';
+  nm.firstChild.textContent = `Tile · ${def.name || 'unnamed'} ('${ch}')`;
+  nm.lastChild.textContent = `at (${p.x},${p.y}) · ${def.solid ? 'solid: blocks movement' : 'walkable'}`;
+  head.append(c, nm); box.append(head);
+
+  const row = (label, input) => { const f = document.createElement('div'); f.className = 'field'; const l = document.createElement('label'); l.textContent = label; f.append(l, input, document.createElement('span')); box.append(f); };
+  // change just this cell
+  const kind = document.createElement('select');
+  for (const [k, d] of Object.entries(types)) kind.add(new Option(`'${k}' ${d.name || ''}`, k));
+  kind.value = ch;
+  kind.onchange = () => { cmd({ cmd: 'paint', tile: kind.value, cells: [[p.x, p.y]] }); inspKey = ''; };
+  row('this tile', kind);
+
+  const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = `Every '${ch}' tile`; box.append(sub);
+  const setDef = patch => { cmd({ cmd: 'tile', char: ch, ...patch }); inspKey = ''; };
+  const name = document.createElement('input'); name.value = def.name || '';
+  name.onchange = () => setDef({ name: name.value || null }); name.onkeydown = e => { if (e.key === 'Enter') name.blur(); };
+  row('name', name);
+  const solid = document.createElement('select');
+  solid.add(new Option('solid (blocks)', 'true')); solid.add(new Option('walkable', 'false'));
+  solid.value = String(!!def.solid);
+  solid.onchange = () => setDef({ solid: solid.value === 'true' });
+  row('movement', solid);
+  const color = document.createElement('input'); color.type = 'color'; color.value = /^#[0-9a-f]{6}$/i.test(def.color || '') ? def.color : (ch === '#' ? '#2c313d' : '#12141a');
+  color.onchange = () => setDef({ color: color.value, sprite: null });
+  row('color', color);
+  const sp = document.createElement('select'); sp.add(new Option('(none)', ''));
+  for (const s of Object.keys(es.sprites)) sp.add(new Option(s, s));
+  sp.value = def.sprite || '';
+  sp.onchange = () => setDef({ sprite: sp.value || null });
+  row('sprite', sp);
+
+  const acts = document.createElement('div'); acts.className = 'iactions';
+  acts.innerHTML = `<button data-a="paint">🖌 Paint with this</button><button data-a="ask">💬 Ask the agent…</button>`;
+  acts.querySelector('[data-a=paint]').onclick = () => { $('ptile').value = ch; setTool('paint'); pushUi({ tile: ch }); };
+  acts.querySelector('[data-a=ask]').onclick = async () => {
+    const t = await ask(`Ask the agent about (${p.x},${p.y})`, `This is a '${ch}' ${def.name || ''} tile. e.g. "make this a door that opens with a key"`, '', true);
+    if (t) cmd({ cmd: 'request', x: p.x, y: p.y, text: t });
+  };
+  box.append(acts);
+  const tip = document.createElement('div'); tip.className = 'muted';
+  tip.textContent = 'Tip: 🖌 Paint (B) to draw tiles, Shift+drag to fill a rectangle. Right-click for more.';
+  box.append(tip);
+}
+
+let treeKey = '';
+function renderTree() {
+  if (!es) return;
+  const key = JSON.stringify([selected, es.entities.map(e => [e.id, e.kind, e.x, e.y, e.glyph, e.color, e.sprite, e.script]), Object.keys(es.sprites)]);
+  if (key === treeKey) return;
+  treeKey = key;
+  const groups = {};
+  for (const e of es.entities) (groups[e.kind] ||= []).push(e);
+  const tree = $('tree'); tree.innerHTML = '';
+  for (const kind of Object.keys(groups).sort()) {
+    const g = document.createElement('div'); g.className = 'group'; g.textContent = `▾ ${kind}  (${groups[kind].length})`;
+    tree.append(g);
+    for (const e of groups[kind]) {
+      const it = document.createElement('div');
+      it.className = 'item' + (e.id === selected ? ' sel' : '');
+      it.dataset.id = e.id;
+      const label = document.createElement('span'); label.textContent = `#${e.id}` + (e.script ? ` · ${e.script}` : '');
+      const pos = document.createElement('span'); pos.className = 'pos'; pos.textContent = `${e.x},${e.y}`;
+      it.append(swatch(e), label, pos);
+      it.onclick = () => select(e.id);
+      tree.append(it);
+      if (e.id === selected) setTimeout(() => it.scrollIntoView({ block: 'nearest' }));
+    }
+  }
+  if (!es.entities.length) tree.innerHTML = '<div class="muted">No entities yet. Use ✚ Place.</div>';
+}
+
+let inspKey = '';
+function renderInspector() {
+  const box = $('inspector');
+  if (box.contains(document.activeElement)) return;   // don't clobber what you're typing
+  if (selCell && cur) {
+    const key = JSON.stringify(['cell', selCell, (maps[cur.map] || [])[selCell.y], es && es.tiles, es && Object.keys(es.sprites)]);
+    if (key !== inspKey) { inspKey = key; renderCellInspector(box); }
+    return;
+  }
+  const e = es && es.entities.find(e => e.id === selected);
+  const key = JSON.stringify([e, es && Object.keys(es.scripts), es && Object.keys(es.sprites)]);
+  if (key === inspKey) return;
+  inspKey = key;
+  if (!e) { box.innerHTML = `<div class="muted">${selected == null ? 'Click an entity in the viewport or scene list.' : 'That entity is gone.'}</div>`; return; }
+  box.innerHTML = '';
+  const head = document.createElement('div'); head.className = 'ihead';
+  const sw = swatch(e); head.append(sw);
+  const nm = document.createElement('div'); nm.innerHTML = `<div class="name"></div><div class="id"></div>`;
+  nm.firstChild.textContent = e.kind; nm.lastChild.textContent = `#${e.id}` + (e.prefab ? ` · from prefab '${e.prefab}'` : '');
+  head.append(nm); box.append(head);
+
+  const field = (label, input, removable) => {
+    const f = document.createElement('div'); f.className = 'field';
+    const l = document.createElement('label'); l.textContent = label; l.title = label;
+    f.append(l, input);
+    if (removable) {
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.title = 'Remove property';
+      x.onclick = () => { cmd({ cmd: 'set', id: e.id, key: label, value: null }); inspKey = ''; };
+      f.append(x);
+    } else f.append(document.createElement('span'));
+    box.append(f);
+  };
+  const text = (key, val, parse) => {
+    const i = document.createElement('input');
+    i.value = typeof val === 'string' ? val : JSON.stringify(val);
+    i.onchange = () => { cmd({ cmd: 'set', id: e.id, key, value: parse(i.value) }); inspKey = ''; i.blur(); };
+    i.onkeydown = k => { if (k.key === 'Enter') i.onchange(); if (k.key === 'Escape') { inspKey = ''; i.blur(); renderInspector(); } };
+    return i;
+  };
+  const smart = v => { try { return JSON.parse(v); } catch { return v; } };
+  const pick = (key, options, value) => {
+    const s = document.createElement('select');
+    s.innerHTML = '<option value="">(none)</option>';
+    for (const o of options) s.add(new Option(o, o));
+    s.value = value || '';
+    s.onchange = () => { cmd({ cmd: 'set', id: e.id, key, value: s.value || null }); inspKey = ''; };
+    return s;
+  };
+
+  field('kind', text('kind', e.kind, v => v));
+  field('x', text('x', e.x, v => parseInt(v, 10)));
+  field('y', text('y', e.y, v => parseInt(v, 10)));
+  field('script', pick('script', Object.keys(es.scripts), e.script));
+  field('sprite', pick('sprite', Object.keys(es.sprites), e.sprite));
+
+  const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = 'Properties'; box.append(sub);
+  for (const [k, v] of Object.entries(e)) {
+    if (['id', 'kind', 'x', 'y', 'script', 'sprite'].includes(k)) continue;
+    field(k, text(k, v, smart), true);
+  }
+  const add = document.createElement('div'); add.className = 'field';
+  add.innerHTML = `<input placeholder="new prop"><input placeholder="value"><button class="x" title="Add">＋</button>`;
+  const [ak, av, ab] = add.children;
+  ab.onclick = () => { if (ak.value.trim()) { cmd({ cmd: 'set', id: e.id, key: ak.value.trim(), value: smart(av.value) }); inspKey = ''; } };
+  av.onkeydown = k => { if (k.key === 'Enter') ab.onclick(); };
+  box.append(add);
+
+  const acts = document.createElement('div'); acts.className = 'iactions';
+  acts.innerHTML = `<button data-a="dup">⧉ Duplicate</button><button data-a="prefab">★ Make prefab</button><button data-a="del" class="danger">🗑 Delete</button>`;
+  box.append(acts);
+  const templ = () => { const p = { kind: e.kind }; for (const [k, v] of Object.entries(e)) if (!['id', 'kind', 'x', 'y', 'prefab'].includes(k)) p[k] = v; return p; };
+  acts.querySelector('[data-a=del]').onclick = () => { cmd({ cmd: 'destroy', id: e.id }); select(null); };
+  acts.querySelector('[data-a=dup]').onclick = async () => {
+    const { kind, ...props } = templ();
+    const r = await cmd({ cmd: 'create', kind, x: e.x + 1, y: e.y, props });
+    if (r.ok) select(r.id);
+  };
+  acts.querySelector('[data-a=prefab]').onclick = async () => {
+    const name = await ask('Prefab name', 'Reusable template: place copies from the ✚ Place list.', e.kind);
+    if (name) cmd({ cmd: 'prefab', name, props: templ() });
+  };
+}
+
+// ---------- scripts ----------
+let curScript = null, dirty = false, lastSrc = {};
+function renderScripts() {
+  if (!es) return;
+  const list = $('slist'); list.innerHTML = '';
+  for (const name of Object.keys(es.scripts).sort()) {
+    const it = document.createElement('div');
+    it.className = 'item' + (name === curScript ? ' sel' : '') + (es.compile_errors[name] ? ' err' : '');
+    it.textContent = name;
+    it.onclick = () => openScript(name);
+    list.append(it);
+  }
+  const nw = document.createElement('div'); nw.className = 'item'; nw.style.color = 'var(--accent)'; nw.textContent = '+ New script';
+  nw.onclick = newScript; list.append(nw);
+  if (curScript && es.scripts[curScript] !== undefined && lastSrc[curScript] !== undefined && es.scripts[curScript] !== lastSrc[curScript]) {
+    if (!dirty) { $('code').value = es.scripts[curScript]; status('updated by the agent', 'agent'); }
+    else status('⚠ changed elsewhere while you were editing; saving will overwrite it', 'bad');
+  }
+  lastSrc = { ...es.scripts };
+}
+function openScript(name, push = true) {
+  if (push && dirty && !confirm('Discard unsaved changes?')) return;
+  curScript = name; dirty = false;
+  $('code').value = es.scripts[name] ?? '';
+  status(es.compile_errors[name] ? '✗ ' + es.compile_errors[name] : '', es.compile_errors[name] ? 'bad' : '');
+  showTab('scripts', false);
+  renderScripts();
+  if (push) pushUi({ script: name });
+}
+function newScript() {
+  const name = (prompt('Script name (entities use it via their "script" field):') || '').trim();
+  if (!name) return;
+  curScript = name; dirty = true;
+  $('code').value = name === 'rules'
+    ? '// Runs once per tick, after every entity.\nfn rules() {\n  \n}\n'
+    : '// Runs once per tick for each entity whose script is "' + name + '".\nfn tick(me) {\n  let e = get(me);\n  \n}\n';
+  renderScripts(); $('code').focus();
+}
+function status(t, cls) { $('cstatus').textContent = t; $('cstatus').className = cls || ''; }
+async function saveScript() {
+  if (!curScript) return;
+  const r = await cmd({ cmd: 'script', name: curScript, code: $('code').value });
+  if (r.ok) { dirty = false; lastSrc[curScript] = $('code').value; status('✓ compiled · ' + r.functions.join(', '), 'good'); }
+  else status('✗ ' + r.error, 'bad');
+}
+$('code').addEventListener('input', () => { dirty = true; status('unsaved', ''); });
+$('code').addEventListener('keydown', ev => {
+  if (ev.key === 'Tab') { ev.preventDefault(); document.execCommand('insertText', false, '  '); }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 's') { ev.preventDefault(); saveScript(); }
+});
+$('ssave').onclick = saveScript;
+
+// ---------- assets ----------
+let assetsKey = '';
+function renderAssets() {
+  const key = JSON.stringify([es.sprites, es.tiles, es.prefabs]);
+  if (key === assetsKey) return;
+  assetsKey = key;
+  const box = $('assets'); box.innerHTML = '';
+  const section = (title, hint) => { const h = document.createElement('div'); h.className = 'ahead'; h.textContent = title; box.append(h); const g = document.createElement('div'); g.className = 'agrid'; box.append(g); if (hint) { const m = document.createElement('div'); m.className = 'muted'; m.style.padding = '0'; m.textContent = hint; g.append(m); } return g; };
+
+  const sg = section('Sprites', Object.keys(es.sprites).length ? '' : 'No sprites yet. Ask the agent to draw some, e.g. "draw an 8x8 knight sprite".');
+  for (const [name, sp] of Object.entries(es.sprites)) {
+    const card = document.createElement('div'); card.className = 'card'; card.title = 'Use on the selected entity';
+    const c = document.createElement('canvas'); c.width = 48; c.height = 48; drawSprite(c.getContext('2d'), name, 0, 0, 48);
+    const w = Math.max(...sp.pixels.map(r => [...r].length));
+    card.append(c, Object.assign(document.createElement('div'), { textContent: name }), Object.assign(document.createElement('div'), { className: 'meta', textContent: `${w}×${sp.pixels.length}` }));
+    card.onclick = () => { if (selected != null) cmd({ cmd: 'set', id: selected, key: 'sprite', value: name }); };
+    card.oncontextmenu = ev => { ev.preventDefault(); menu(ev.clientX, ev.clientY, `sprite '${name}'`, [
+      ...(selected != null ? [{ label: 'Use on selected entity', run: () => cmd({ cmd: 'set', id: selected, key: 'sprite', value: name }) }] : []),
+      { label: '💬 Ask the agent to change it…', cls: 'ask', run: async () => { const t = await ask(`Ask the agent about sprite '${name}'`, 'e.g. "make it face left", "add a red cape"', '', true); if (t) cmd({ cmd: 'request', text: `[sprite '${name}'] ${t}` }); } },
+      { label: '⤓ Export .png', run: () => spritePng(name) },
+      { label: '⤓ Export .json', run: () => download(name + '.json', JSON.stringify(sp, null, 2)) },
+      '-',
+      { label: '🗑 Delete sprite', cls: 'danger', run: () => cmd({ cmd: 'sprite', name, delete: true }) },
+    ]); };
+    sg.append(card);
+  }
+
+  const tg = section('Tiles');
+  const tiles = { '#': { name: 'wall', solid: true }, '.': { name: 'floor', solid: false }, ...es.tiles };
+  for (const [ch, def] of Object.entries(tiles)) {
+    const card = document.createElement('div'); card.className = 'card'; card.title = 'Paint with this tile';
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const save = [ctx, TS]; ctx = c.getContext('2d'); TS = 32; drawTile(ch, 0, 0, 0, 0); [ctx, TS] = save;
+    card.append(c, Object.assign(document.createElement('div'), { textContent: `'${ch}' ${def.name || ''}` }), Object.assign(document.createElement('div'), { className: 'meta', textContent: def.solid ? 'solid' : 'walkable' }));
+    card.onclick = () => { $('ptile').value = ch; setTool('paint'); pushUi({ tile: ch }); };
+    tg.append(card);
+  }
+
+  const pg = section('Prefabs', Object.keys(es.prefabs).length ? '' : 'No prefabs yet. Select an entity and click ★ Make prefab.');
+  for (const [name, props] of Object.entries(es.prefabs)) {
+    const card = document.createElement('div'); card.className = 'card'; card.title = 'Place this prefab';
+    card.append(swatch({ kind: props.kind || name, ...props }), Object.assign(document.createElement('div'), { textContent: name }),
+      Object.assign(document.createElement('div'), { className: 'meta', textContent: props.script ? 'script: ' + props.script : (props.kind || '') }));
+    card.onclick = () => { $('place').value = 'prefab:' + name; setTool('place'); pushUi({ place: 'prefab:' + name }); };
+    pg.append(card);
+  }
+}
+
+// ---------- console ----------
+const hist = []; let hpos = 0;
+$('cin').addEventListener('keydown', async ev => {
+  if (ev.key === 'ArrowUp' && hpos > 0) { $('cin').value = hist[--hpos]; return; }
+  if (ev.key === 'ArrowDown' && hpos < hist.length) { $('cin').value = hist[++hpos] ?? ''; return; }
+  if (ev.key !== 'Enter' || !$('cin').value.trim()) return;
+  const src = $('cin').value.trim(); $('cin').value = ''; hist.push(src); hpos = hist.length;
+  const out = $('cout');
+  const line = (cls, t) => { const s = document.createElement('div'); s.className = cls; s.textContent = t; out.append(s); out.scrollTop = out.scrollHeight; };
+  line('in', '> ' + src);
+  let c;
+  if (/^[\[{]/.test(src)) { try { c = JSON.parse(src); } catch (e) { return line('bad', 'bad JSON: ' + e.message); } }
+  else c = { cmd: 'exec', code: src };
+  const r = await cmd(c);
+  for (const x of Array.isArray(r) ? r : [r]) {
+    if (!x.ok) { line('bad', x.error); continue; }
+    const { ok, cmd: _, ...rest } = x;
+    line('', c.cmd === 'exec' ? JSON.stringify(rest.result, null, 1) : JSON.stringify(rest, null, 1).slice(0, 4000));
+  }
+});
+
+// ---------- toolbar & tabs ----------
+$('play').onclick = () => { document.activeElement.blur(); cmd(es && es.playing ? { cmd: 'pause' } : { cmd: 'play', tps: +$('tps').value }); };
+$('step').onclick = () => cmd({ cmd: 'step', ticks: 1 });
+$('tps').onchange = () => { if (es && es.playing) cmd({ cmd: 'play', tps: +$('tps').value }); };
+$('undo').onclick = () => cmd({ cmd: 'undo' });
+$('redo').onclick = () => cmd({ cmd: 'redo' });
+$('snap').onclick = () => {
+  const name = prompt('Snapshot name:', 'snap-' + ((es && es.snapshots.length) + 1 || 1));
+  if (name) cmd({ cmd: 'snapshot', name });
+};
+$('restore').onchange = () => { const n = $('restore').value; $('restore').value = ''; if (n) cmd({ cmd: 'restore', name: n }); };
+$('save').onclick = async () => {
+  const r = await cmd(es && es.path ? { cmd: 'save' } : { cmd: 'save', path: prompt('Save world to folder:') || '' });
+  $('save').textContent = r.ok ? '✓ Saved' : '✗ ' + r.error;
+  setTimeout(() => $('save').textContent = '💾 Save', 1800);
+};
+$('live').onclick = () => { if (queue.length) { show(queue[queue.length - 1], true); queue = []; } };
+
+function showTab(name, push = true) {
+  document.querySelectorAll('.tabs [data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === name));
+  if (push) pushUi({ tab: name });
+}
+document.querySelectorAll('.tabs [data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+// ---------- keyboard: editor shortcuts, or game input while playing ----------
+const gameKey = k => ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Enter', 'Shift'].includes(k) || /^[a-z0-9]$/i.test(k);
+document.addEventListener('keydown', ev => {
+  if (typing()) return;
+  const ctrl = ev.ctrlKey || ev.metaKey;
+  if (ctrl && ev.key.toLowerCase() === 'z') { ev.preventDefault(); cmd({ cmd: ev.shiftKey ? 'redo' : 'undo' }); return; }
+  if (ctrl && ev.key.toLowerCase() === 'y') { ev.preventDefault(); cmd({ cmd: 'redo' }); return; }
+  if (es && es.playing) {
+    if (ev.key === 'Escape') { cmd({ cmd: 'pause' }); return; }
+    if (gameKey(ev.key)) { ev.preventDefault(); if (!ev.repeat) cmd({ cmd: 'input', down: ev.key }); }
+    return;
+  }
+  const k = ev.key.toLowerCase();
+  if (k === ' ') { ev.preventDefault(); $('play').click(); }
+  else if (k === '.') $('step').click();
+  else if (k === 'escape') select(null);
+  else if ((k === 'delete' || k === 'backspace') && selCell) cmd({ cmd: 'paint', tile: '.', cells: [[selCell.x, selCell.y]] });
+  else if ((k === 'delete' || k === 'backspace') && selected != null) { cmd({ cmd: 'destroy', id: selected }); select(null); }
+  else if ({ v: 'select', b: 'paint', p: 'place', e: 'erase' }[k]) setTool({ v: 'select', b: 'paint', p: 'place', e: 'erase' }[k]);
+});
+document.addEventListener('keyup', ev => {
+  if (es && es.playing && gameKey(ev.key)) cmd({ cmd: 'input', up: ev.key });
+});
+window.addEventListener('blur', () => { if (es && es.playing) cmd({ cmd: 'input', clear: true }); });
+
+// ---------- modal input (nicer than prompt) ----------
+function ask(title, hint, value = '', multiline = false) {
+  return new Promise(done => {
+    const bg = document.createElement('div'); bg.className = 'modal-bg';
+    bg.innerHTML = `<div class="modal"><h3></h3><p></p>${multiline ? '<textarea></textarea>' : '<input>'}<div class="row"><button data-x>Cancel</button><button class="primary" data-ok>OK</button></div></div>`;
+    bg.querySelector('h3').textContent = title; bg.querySelector('p').textContent = hint || '';
+    const inp = bg.querySelector('textarea, input'); inp.value = value;
+    const close = v => { bg.remove(); done(v); };
+    bg.querySelector('[data-x]').onclick = () => close(null);
+    bg.querySelector('[data-ok]').onclick = () => close(inp.value.trim() || null);
+    bg.onmousedown = e => { if (e.target === bg) close(null); };
+    inp.onkeydown = e => { if (e.key === 'Escape') close(null); if (e.key === 'Enter' && (!multiline || e.ctrlKey)) { e.preventDefault(); close(inp.value.trim() || null); } };
+    document.body.append(bg); inp.focus(); inp.select();
+  });
+}
+
+// ---------- right-click menu ----------
+let clipboard = null;
+function menu(x, y, title, items) {
+  closeMenu();
+  const m = document.createElement('div'); m.className = 'menu'; m.id = 'menu';
+  if (title) { const h = document.createElement('div'); h.className = 'mh'; h.textContent = title; m.append(h); }
+  for (const it of items) {
+    if (it === '-') { m.append(document.createElement('hr')); continue; }
+    const d = document.createElement('div'); d.className = 'mi ' + (it.cls || ''); d.textContent = it.label;
+    d.onclick = () => { closeMenu(); it.run(); };
+    m.append(d);
+  }
+  document.body.append(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+function closeMenu() { const m = $('menu'); if (m) m.remove(); }
+window.addEventListener('mousedown', e => { if (!e.target.closest('.menu')) closeMenu(); });
+
+const template = e => { const p = { kind: e.kind }; for (const [k, v] of Object.entries(e)) if (!['id', 'kind', 'x', 'y', 'prefab'].includes(k)) p[k] = v; return p; };
+function download(name, text, type = 'application/json') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function entityMenu(ev, id) {
+  const e = es.entities.find(e => e.id === id);
+  if (!e) return;
+  select(id);
+  menu(ev.clientX, ev.clientY, `#${e.id} ${e.kind} at (${e.x},${e.y})`, [
+    { label: '💬 Ask the agent about this…', cls: 'ask', run: async () => {
+      const t = await ask(`Ask the agent about #${e.id} ${e.kind}`, 'e.g. "make this chase the player", "give this a sword sprite", "this should explode when touched"', '', true);
+      if (t) cmd({ cmd: 'request', id: e.id, text: t });
+    } },
+    { label: '🏷 Add tag…', run: async () => {
+      const t = await ask('Add tag', 'Scripts can find tagged things with tagged("name"). Existing: ' + ((e.tags || []).join(', ') || 'none'));
+      if (t) cmd({ cmd: 'set', id: e.id, key: 'tags', value: [...new Set([...(e.tags || []), t])] });
+    } },
+    '-',
+    { label: '⧉ Duplicate', run: async () => { const { kind, ...props } = template(e); const r = await cmd({ cmd: 'create', kind, x: e.x + 1, y: e.y, props }); if (r.ok) select(r.id); } },
+    { label: '📋 Copy', run: () => { clipboard = template(e); navigator.clipboard?.writeText(JSON.stringify(e, null, 2)).catch(() => {}); } },
+    { label: '★ Make prefab…', run: async () => { const n = await ask('Prefab name', 'Reusable template: place copies from the ✚ Place list.', e.kind); if (n) cmd({ cmd: 'prefab', name: n, props: template(e) }); } },
+    { label: '📜 Edit its script', run: () => { if (e.script && es.scripts[e.script] !== undefined) openScript(e.script); else newScriptFor(e); } },
+    { label: '⬆ Bring to front', run: () => cmd({ cmd: 'set', id: e.id, key: 'z', value: Math.max(0, ...es.entities.map(x => x.z || 0)) + 1 }) },
+    { label: 'ⓘ Copy all metadata (JSON)', run: () => navigator.clipboard?.writeText(JSON.stringify(e, null, 2)) },
+    { label: '⤓ Export as .json', run: () => download(`${e.kind}-${e.id}.json`, JSON.stringify(e, null, 2)) },
+    '-',
+    { label: '🗑 Delete', cls: 'danger', run: () => cmd({ cmd: 'destroy', id: e.id }) },
+  ]);
+}
+function cellMenu(ev, p) {
+  const tile = (maps[cur.map] || [])[p.y]?.[p.x] ?? ' ';
+  const placeName = $('place').selectedOptions[0]?.textContent || '';
+  menu(ev.clientX, ev.clientY, `cell (${p.x},${p.y}) · tile '${tile}'`, [
+    { label: '💬 Ask the agent about this spot…', cls: 'ask', run: async () => {
+      const t = await ask(`Ask the agent about (${p.x},${p.y})`, 'e.g. "put a locked door here", "spawn enemies from here every 10 ticks"', '', true);
+      if (t) cmd({ cmd: 'request', x: p.x, y: p.y, text: t });
+    } },
+    '-',
+    ...(placeName ? [{ label: `✚ Place ${placeName} here`, run: () => placeAt(p) }] : []),
+    ...(clipboard ? [{ label: `📋 Paste ${clipboard.kind} here`, run: async () => { const { kind, ...props } = clipboard; const r = await cmd({ cmd: 'create', kind, x: p.x, y: p.y, props }); if (r.ok) select(r.id); } }] : []),
+    { label: '▦ Make wall', run: () => cmd({ cmd: 'paint', tile: '#', cells: [[p.x, p.y]] }) },
+    { label: '▢ Make floor', run: () => cmd({ cmd: 'paint', tile: '.', cells: [[p.x, p.y]] }) },
+  ]);
+}
+cv.addEventListener('contextmenu', ev => {
+  ev.preventDefault();
+  if (!cur || !es) return;
+  const p = tileAt(ev), here = entsAt(p);
+  if (here.length) entityMenu(ev, here[0][0]); else cellMenu(ev, p);
+});
+$('tree').addEventListener('contextmenu', ev => {
+  const it = ev.target.closest('.item'); if (!it) return;
+  ev.preventDefault(); entityMenu(ev, +it.dataset.id);
+});
+async function newScriptFor(e) {
+  const name = await ask('New script name', `Will be attached to #${e.id} ${e.kind}.`, e.kind);
+  if (!name) return;
+  const code = `// Runs once per tick for each entity whose script is "${name}".\nfn tick(me) {\n  let e = get(me);\n  \n}\n`;
+  const r = await cmd({ cmd: 'script', name, code });
+  if (r.ok) { await cmd({ cmd: 'set', id: e.id, key: 'script', value: name }); await refresh(); openScript(name); }
+}
+
+// ---------- requests ----------
+let reqKey = '', reqSeen = null;
+function renderRequests() {
+  const list = es.requests || [];
+  const open = list.filter(r => r.status === 'open').length;
+  $('rbadge').hidden = !open; $('rbadge').textContent = open;
+  // Tell the user when the agent answers one.
+  const snapshot = Object.fromEntries(list.map(r => [r.rid, r.status]));
+  if (reqSeen) for (const r of list) if (reqSeen[r.rid] === 'open' && r.status !== 'open') toast(`${r.status === 'done' ? '✓' : '✗'} ${r.text} — ${r.reply || r.status}`, 'agent');
+  reqSeen = snapshot;
+  const key = JSON.stringify(list);
+  if (key === reqKey) return;
+  reqKey = key;
+  const ul = $('reqs'); ul.innerHTML = '';
+  if (!list.length) ul.innerHTML = '<div class="muted">Right-click anything in the game and choose “Ask the agent about this…”. Requests show up here and as ? pins on the map until the agent resolves them.</div>';
+  for (const r of [...list].reverse()) {
+    const li = document.createElement('li'); li.className = r.status;
+    li.innerHTML = `<span class="st"></span><div><div class="rtext"></div><div class="reply"></div></div><span class="about"></span>`;
+    li.querySelector('.st').textContent = r.status;
+    li.querySelector('.rtext').textContent = r.text;
+    li.querySelector('.reply').textContent = r.reply ? '🤖 ' + r.reply : '';
+    li.querySelector('.about').textContent = r.entity ? `#${r.entity.id} ${r.entity.kind}` : `(${r.x},${r.y})`;
+    li.onclick = () => { if (r.entity) select(r.entity.id); markers.push({ x: r.x, y: r.y, label: r.text.slice(0, 40), t0: performance.now() }); };
+    ul.append(li);
+  }
+}
+
+// ---------- import ----------
+const PAL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const stem = name => name.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_').toLowerCase() || 'imported';
+function imageToSprite(img, maxSize = 32, maxColors = 24) {
+  const k = Math.min(1, maxSize / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = k < 1; g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  // Count colors (rounded a little so near-identical shades merge), keep the most common.
+  const q = v => Math.min(255, Math.round(v / 8) * 8);
+  const counts = new Map();
+  for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) { const key = (q(px[i]) << 16) | (q(px[i + 1]) << 8) | q(px[i + 2]); counts.set(key, (counts.get(key) || 0) + 1); }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxColors).map(([c]) => [c >> 16 & 255, c >> 8 & 255, c & 255]);
+  const palette = {}; top.forEach((rgb, i) => palette[PAL[i]] = '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join(''));
+  const pixels = [];
+  for (let y = 0; y < h; y++) {
+    let row = '';
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (px[i + 3] < 128) { row += '.'; continue; }
+      let best = 0, bd = 1e9;
+      top.forEach(([r, gg, b], j) => { const d = (r - px[i]) ** 2 + (gg - px[i + 1]) ** 2 + (b - px[i + 2]) ** 2; if (d < bd) { bd = d; best = j; } });
+      row += PAL[best];
+    }
+    pixels.push(row);
+  }
+  return { palette, pixels };
+}
+const loadImage = file => new Promise((ok, bad) => { const img = new Image(); img.onload = () => ok(img); img.onerror = bad; img.src = URL.createObjectURL(file); });
+
+async function importFile(file) {
+  const ext = (file.name.match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
+  const name = stem(file.name);
+  try {
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) {
+      const img = await loadImage(file);
+      const size = img.width <= 64 && img.height <= 64 ? Math.max(img.width, img.height) : 32;
+      const sp = imageToSprite(img, size);
+      const r = await cmd({ cmd: 'sprite', name, ...sp });
+      if (!r.ok) throw new Error(r.error);
+      if (selected != null) await cmd({ cmd: 'set', id: selected, key: 'sprite', value: name });
+      toast(`Imported sprite '${name}' (${sp.pixels[0].length}×${sp.pixels.length}, ${Object.keys(sp.palette).length} colors)` + (selected != null ? ' and put it on the selected entity' : ''), 'you');
+      showTab('assets');
+    } else if (ext === 'rhai') {
+      const r = await cmd({ cmd: 'script', name, code: await file.text() });
+      if (!r.ok) throw new Error(r.error);
+      toast(`Imported script '${name}'`, 'you'); await refresh(); openScript(name);
+    } else if (ext === 'txt' || ext === 'csv') {
+      let rows = (await file.text()).replace(/\r/g, '').split('\n').filter(l => l.length);
+      if (ext === 'csv') rows = rows.map(l => l.split(',').map(v => { v = v.trim(); return v === '0' || v === '' || v === '-1' ? '.' : v === '1' ? '#' : (PAL[(parseInt(v, 10) || 0) % PAL.length] || '?'); }).join(''));
+      if (!confirm(`Replace the map with ${rows[0].length}×${rows.length} from ${file.name}? (undo works)`)) return;
+      const r = await cmd({ cmd: 'set_map', rows });
+      if (!r.ok) throw new Error(r.error);
+    } else if (ext === 'json' || ext === 'tmj') {
+      const data = JSON.parse(await file.text());
+      if (data.pixels && data.palette) {
+        const r = await cmd({ cmd: 'sprite', name, pixels: data.pixels, palette: data.palette }); if (!r.ok) throw new Error(r.error);
+        toast(`Imported sprite '${name}'`, 'you');
+      } else if (data.map && (data.entities || data.format)) {
+        if (!confirm(`Load the world from ${file.name}? The current one is replaced (undo works).`)) return;
+        const r = await cmd({ cmd: 'import', world: data }); if (!r.ok) throw new Error(r.error);
+      } else if (data.layers && data.width) {
+        // Tiled map: first tile layer, gid 0 = floor, 1 = wall, others = letters.
+        const layer = data.layers.find(l => l.type === 'tilelayer' && l.data);
+        if (!layer) throw new Error('no tile layer in this Tiled map');
+        const rows = [];
+        for (let y = 0; y < layer.height; y++) rows.push(layer.data.slice(y * layer.width, (y + 1) * layer.width).map(g => g === 0 ? '.' : g === 1 ? '#' : PAL[g % PAL.length]).join(''));
+        const r = await cmd({ cmd: 'set_map', rows }); if (!r.ok) throw new Error(r.error);
+        toast(`Imported Tiled layer '${layer.name}' (${layer.width}×${layer.height})`, 'you');
+      } else if (data.kind) {
+        const { id, x, y, kind, ...props } = data;
+        const r = await cmd({ cmd: 'create', kind, x: x ?? 1, y: y ?? 1, props }); if (!r.ok) throw new Error(r.error);
+        select(r.id);
+      } else throw new Error('unrecognized JSON (expected a forge world, sprite, entity or Tiled map)');
+    } else throw new Error(`can't import .${ext} files yet`);
+  } catch (e) { toast(`Import failed: ${file.name}: ${e.message}`, 'you'); }
+}
+$('import').onclick = () => $('file').click();
+$('file').onchange = async () => { for (const f of $('file').files) await importFile(f); $('file').value = ''; };
+let dragDepth = 0;
+window.addEventListener('dragenter', e => { if (e.dataTransfer.types.includes('Files')) { dragDepth++; $('drop').style.display = 'grid'; } });
+window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').style.display = 'none'; } });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', async e => {
+  e.preventDefault(); dragDepth = 0; $('drop').style.display = 'none';
+  for (const f of e.dataTransfer.files) await importFile(f);
+});
+
+// ---------- export ----------
+function spritePng(name, scale = 8) {
+  const c0 = spriteCanvas(name); if (!c0) return;
+  const c = document.createElement('canvas'); c.width = c0.width * scale; c.height = c0.height * scale;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c0, 0, 0, c.width, c.height);
+  const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = name + '.png'; a.click();
+}
+$('export').onclick = ev => {
+  const b = ev.target.getBoundingClientRect();
+  menu(b.left, b.bottom + 4, 'Export', [
+    { label: '🌍 Whole world (.json, re-importable)', run: async () => { const r = await cmd({ cmd: 'export' }); if (r.ok) download(stem(es.path || 'world') + '.json', JSON.stringify(r.world, null, 2)); } },
+    { label: '🗺 Map as text (.txt)', run: () => download('map.txt', (maps[cur.map] || []).join('\n') + '\n', 'text/plain') },
+    { label: '🖼 Screenshot of the game (.png)', run: () => { const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'forge-screenshot.png'; a.click(); } },
+    ...Object.keys(es.sprites).map(n => ({ label: `🎨 Sprite '${n}' (.png)`, run: () => spritePng(n) })),
+    ...Object.keys(es.scripts).map(n => ({ label: `📜 Script '${n}' (.rhai)`, run: () => download(n + '.rhai', es.scripts[n], 'text/plain') })),
+  ]);
+};
+
+function renderAll() {
+  $('path').textContent = es.path || '(unsaved world)';
+  $('play').textContent = es.playing ? '⏸ Pause' : '▶ Play';
+  $('play').classList.toggle('on', es.playing);
+  if (es.playing) $('tps').value = String(es.tps);
+  $('undo').disabled = !es.undo; $('redo').disabled = !es.redo;
+  $('undo').title = `Undo (Ctrl+Z) · ${es.undo} step(s)`; $('redo').title = `Redo (Ctrl+Y) · ${es.redo} step(s)`;
+  const snaps = es.snapshots.join('|');
+  if ($('restore').dataset.k !== snaps) {
+    $('restore').dataset.k = snaps;
+    $('restore').innerHTML = '<option value="">⟲ Restore…</option>' + es.snapshots.map(s => `<option>${esc(s)}</option>`).join('');
+  }
+  // paint palette
+  const tiles = { '#': { name: 'wall' }, '.': { name: 'floor' }, ...es.tiles };
+  const tk = JSON.stringify(tiles);
+  if ($('ptile').dataset.k !== tk) {
+    const keep = $('ptile').value;
+    $('ptile').dataset.k = tk;
+    $('ptile').innerHTML = Object.entries(tiles).map(([ch, d]) => `<option value="${esc(ch)}">'${esc(ch)}' ${esc(d.name || '')}</option>`).join('');
+    if (keep && tiles[keep]) $('ptile').value = keep;
+  }
+  // place palette: prefabs first, then existing kinds
+  const kinds = [...new Set(es.entities.map(e => e.kind))].sort();
+  const pk = JSON.stringify([Object.keys(es.prefabs), kinds]);
+  if ($('place').dataset.k !== pk) {
+    const keep = $('place').value;
+    $('place').dataset.k = pk;
+    $('place').innerHTML =
+      (Object.keys(es.prefabs).length ? '<optgroup label="Prefabs">' + Object.keys(es.prefabs).map(p => `<option value="prefab:${esc(p)}">★ ${esc(p)}</option>`).join('') + '</optgroup>' : '') +
+      '<optgroup label="Copy of kind">' + kinds.map(k => `<option value="kind:${esc(k)}">${esc(k)}</option>`).join('') + '</optgroup>' +
+      '<option value="__new">+ new kind…</option>';
+    if ([...$('place').options].some(o => o.value === keep)) $('place').value = keep;
+  }
+  applyUi(es.ui);
+  applyNotices(es.notices);
+  renderTree(); renderInspector(); renderScripts(); renderAssets(); renderRequests();
+}
+
+refresh(); poll(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>

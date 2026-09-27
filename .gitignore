@@ -1,0 +1,6 @@
+# build output and the installed app copy
+/target/
+/app/
+# autosaves and backups are local recovery data
+.autosave/
+/worlds/backup-*/
