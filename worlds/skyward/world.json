@@ -1,0 +1,741 @@
+{
+  "tick": 1,
+  "tick_rate": 60.0,
+  "physics": {
+    "gravity": 60.0,
+    "max_fall": 22.0
+  },
+  "camera": {
+    "follow": 1,
+    "x": 12.0,
+    "y": 9.0,
+    "view": [
+      24.0,
+      14.0
+    ],
+    "zoom": 1.0,
+    "lerp": 0.15,
+    "bounds": true,
+    "shake": 0.0
+  },
+  "rng": 3,
+  "next_id": 27,
+  "map": [
+    "#..............................................................#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#..............................................................#",
+    "#...............................GGGGGGG........................#",
+    "#..................................H...........................#",
+    "#..................................H...........................#",
+    "#.................===..............H...........................#",
+    "#..........................===.....H.....====..................#",
+    "#...........====.........^.........H...................GGGGGG..#",
+    "#.....................GGGG.........H...................######..#",
+    "#.......GGG...........####.........H..GG...............######..#",
+    "#.......###...........####.........H..##....^^.........######..#",
+    "#GGGGGGG###GGG...GGGGG####GGGG....GGGG##GGGGGGG...GGGGG######GG#",
+    "##############...#############....#############...##############"
+  ],
+  "vars": {
+    "coins": 0,
+    "lives": 3,
+    "spawn": [
+      2,
+      13.1
+    ],
+    "total": 18
+  },
+  "entities": {
+    "1": {
+      "kind": "player",
+      "x": 2,
+      "y": 13.1,
+      "script": "player",
+      "buffer": 0,
+      "coyote": 0,
+      "flip": "auto",
+      "gravity": 1,
+      "h": 0.9,
+      "hit_ceiling": false,
+      "hit_wall": 0,
+      "on_ground": true,
+      "on_ladder": false,
+      "physics": true,
+      "prefab": "player",
+      "sprite": "knight",
+      "tags": [
+        "player"
+      ],
+      "vx": 0.0,
+      "vy": 0.0,
+      "w": 0.75,
+      "z": 5
+    },
+    "2": {
+      "kind": "slime",
+      "x": 9,
+      "y": 12.3,
+      "script": "slime",
+      "dir": -1,
+      "flip": "auto",
+      "h": 0.7,
+      "hit_ceiling": false,
+      "hit_wall": 0,
+      "on_ground": true,
+      "on_ladder": false,
+      "physics": true,
+      "prefab": "slime",
+      "speed": 2.0,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "vx": 0.0,
+      "vy": 0.0,
+      "w": 0.9,
+      "z": 3
+    },
+    "3": {
+      "kind": "slime",
+      "x": 19,
+      "y": 11.316666666666668,
+      "script": "slime",
+      "dir": -1,
+      "flip": "auto",
+      "h": 0.7,
+      "hit_ceiling": false,
+      "hit_wall": 0,
+      "on_ground": false,
+      "on_ladder": false,
+      "physics": true,
+      "prefab": "slime",
+      "speed": 2.0,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "vx": 0.0,
+      "vy": 1.0,
+      "w": 0.9,
+      "z": 3
+    },
+    "4": {
+      "kind": "slime",
+      "x": 29,
+      "y": 12.316666666666668,
+      "script": "slime",
+      "dir": -1,
+      "flip": "auto",
+      "h": 0.7,
+      "hit_ceiling": false,
+      "hit_wall": 0,
+      "on_ground": false,
+      "on_ladder": false,
+      "physics": true,
+      "prefab": "slime",
+      "speed": 2.0,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "vx": 0.0,
+      "vy": 1.0,
+      "w": 0.9,
+      "z": 3
+    },
+    "5": {
+      "kind": "slime",
+      "x": 43,
+      "y": 13.3,
+      "script": "slime",
+      "dir": -1,
+      "flip": "auto",
+      "h": 0.7,
+      "hit_ceiling": false,
+      "hit_wall": 0,
+      "on_ground": true,
+      "on_ladder": false,
+      "physics": true,
+      "prefab": "slime",
+      "speed": 2.0,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "vx": 0.0,
+      "vy": 0.0,
+      "w": 0.9,
+      "z": 3
+    },
+    "6": {
+      "kind": "coin",
+      "x": 5,
+      "y": 12.5,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "7": {
+      "kind": "coin",
+      "x": 9.2,
+      "y": 10.8,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "8": {
+      "kind": "coin",
+      "x": 13.2,
+      "y": 8.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "9": {
+      "kind": "coin",
+      "x": 14.2,
+      "y": 8.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "10": {
+      "kind": "coin",
+      "x": 19.2,
+      "y": 6.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "11": {
+      "kind": "coin",
+      "x": 23.2,
+      "y": 9.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "12": {
+      "kind": "coin",
+      "x": 28.2,
+      "y": 7.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "13": {
+      "kind": "coin",
+      "x": 32.2,
+      "y": 3.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "14": {
+      "kind": "coin",
+      "x": 33.2,
+      "y": 3.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "15": {
+      "kind": "coin",
+      "x": 34.2,
+      "y": 3.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "16": {
+      "kind": "coin",
+      "x": 36.2,
+      "y": 3.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "17": {
+      "kind": "coin",
+      "x": 37.2,
+      "y": 3.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "18": {
+      "kind": "coin",
+      "x": 42.2,
+      "y": 7.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "19": {
+      "kind": "coin",
+      "x": 43.2,
+      "y": 7.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "20": {
+      "kind": "coin",
+      "x": 48.2,
+      "y": 10.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "21": {
+      "kind": "coin",
+      "x": 52.2,
+      "y": 12.5,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "22": {
+      "kind": "coin",
+      "x": 57.2,
+      "y": 8.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "23": {
+      "kind": "coin",
+      "x": 59.2,
+      "y": 8.6,
+      "h": 0.6,
+      "prefab": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "24": {
+      "kind": "lift",
+      "x": 29.541666666666668,
+      "y": 11,
+      "script": "mover",
+      "h": 1,
+      "physics": "kinematic",
+      "prefab": "lift",
+      "range": 4.5,
+      "solid": "platform",
+      "speed": 2.5,
+      "sprite": "lift",
+      "vx": 2.5,
+      "w": 3,
+      "x0": 29.5,
+      "z": 1
+    },
+    "25": {
+      "kind": "checkpoint",
+      "x": 27,
+      "y": 12,
+      "h": 2,
+      "prefab": "checkpoint",
+      "sprite": "checkpoint",
+      "w": 1,
+      "z": 1
+    },
+    "26": {
+      "kind": "flag",
+      "x": 61,
+      "y": 8,
+      "h": 2,
+      "prefab": "flag",
+      "sprite": "flag",
+      "w": 1,
+      "z": 1
+    }
+  },
+  "tiles": {
+    "#": {
+      "name": "dirt",
+      "solid": true,
+      "sprite": "dirt"
+    },
+    ".": {
+      "name": "sky",
+      "solid": false,
+      "color": "#1b2a4a"
+    },
+    "=": {
+      "name": "plank",
+      "solid": false,
+      "platform": true,
+      "sprite": "plank"
+    },
+    "G": {
+      "name": "grass",
+      "solid": true,
+      "sprite": "grass"
+    },
+    "H": {
+      "name": "ladder",
+      "solid": false,
+      "ladder": true,
+      "sprite": "ladder"
+    },
+    "^": {
+      "name": "spikes",
+      "solid": false,
+      "sprite": "spikes"
+    }
+  },
+  "sprites": {
+    "checkpoint": {
+      "palette": {
+        "b": "#5fd3c9",
+        "p": "#c9d1d9"
+      },
+      "pixels": [
+        "pbbb....",
+        "pbbbb...",
+        "pbbb....",
+        "p.......",
+        "p.......",
+        "p.......",
+        "p.......",
+        "p......."
+      ]
+    },
+    "coin": {
+      "palette": {
+        "o": "#d99a1e",
+        "w": "#fff4c2",
+        "y": "#f5c542"
+      },
+      "pixels": [
+        "..yyyy..",
+        ".yowyyy.",
+        "yoyyyyoy",
+        "yoyyyyoy",
+        "yoyyyyoy",
+        "yoyyyyoy",
+        ".yooooy.",
+        "..yyyy.."
+      ]
+    },
+    "dirt": {
+      "palette": {
+        "d": "#6b4a2e",
+        "e": "#5a3c24",
+        "r": "#7a5638"
+      },
+      "pixels": [
+        "dddddddd",
+        "ddeddddd",
+        "dddddrdd",
+        "dddddddd",
+        "drdddded",
+        "dddddddd",
+        "ddddeddd",
+        "eddddddd"
+      ]
+    },
+    "flag": {
+      "palette": {
+        "p": "#c9d1d9",
+        "r": "#ff5f6d",
+        "w": "#ffd0d4"
+      },
+      "pixels": [
+        "prrrr...",
+        "prrwrr..",
+        "prrrrrr.",
+        "prrrr...",
+        "p.......",
+        "p.......",
+        "p.......",
+        "p......."
+      ]
+    },
+    "grass": {
+      "palette": {
+        "d": "#6b4a2e",
+        "e": "#5a3c24",
+        "g": "#4fae3a",
+        "l": "#78d45e"
+      },
+      "pixels": [
+        "llgllglg",
+        "gggggggg",
+        "dgdddgdd",
+        "dddddddd",
+        "ddeddddd",
+        "dddddedd",
+        "dedddddd",
+        "dddddded"
+      ]
+    },
+    "knight": {
+      "palette": {
+        "b": "#4a78e0",
+        "d": "#2b3f7a",
+        "h": "#d7dee8",
+        "l": "#3a2a1a",
+        "s": "#f5c542",
+        "v": "#1d2433"
+      },
+      "pixels": [
+        "..hhhh..",
+        ".hhhhhh.",
+        ".hvvvvh.",
+        ".hhhhhh.",
+        "sbbbbbb.",
+        "s.bddb..",
+        "..b..b..",
+        "..l..l.."
+      ]
+    },
+    "ladder": {
+      "palette": {
+        "w": "#b07a45"
+      },
+      "pixels": [
+        ".w....w.",
+        ".wwwwww.",
+        ".w....w.",
+        ".w....w.",
+        ".w....w.",
+        ".wwwwww.",
+        ".w....w.",
+        ".w....w."
+      ]
+    },
+    "lift": {
+      "palette": {
+        "d": "#5c6577",
+        "m": "#9aa4b8",
+        "y": "#f5c542"
+      },
+      "pixels": [
+        "mmmmmmmm",
+        "dydydydy",
+        "dddddddd",
+        "........",
+        "........",
+        "........",
+        "........",
+        "........"
+      ]
+    },
+    "plank": {
+      "palette": {
+        "d": "#7a4f2a",
+        "w": "#b07a45"
+      },
+      "pixels": [
+        "wwwwwwww",
+        "dwwwdwww",
+        "dddddddd",
+        "........",
+        "........",
+        "........",
+        "........",
+        "........"
+      ]
+    },
+    "slime": {
+      "palette": {
+        "d": "#3a9a3a",
+        "g": "#6fd35f",
+        "k": "#10200f",
+        "w": "#ffffff"
+      },
+      "pixels": [
+        "........",
+        "........",
+        "..gggg..",
+        ".gwggwg.",
+        ".gkggkg.",
+        "gggggggg",
+        "gddddddg",
+        ".gggggg."
+      ]
+    },
+    "spikes": {
+      "palette": {
+        "d": "#8a93a6",
+        "s": "#d7dee8"
+      },
+      "pixels": [
+        "........",
+        "........",
+        "...s...s",
+        "..ss..ss",
+        "..sd..sd",
+        ".ssd.ssd",
+        ".sdd.sdd",
+        "sddssdds"
+      ]
+    }
+  },
+  "prefabs": {
+    "checkpoint": {
+      "h": 2,
+      "kind": "checkpoint",
+      "sprite": "checkpoint",
+      "w": 1,
+      "z": 1
+    },
+    "coin": {
+      "h": 0.6,
+      "kind": "coin",
+      "sprite": "coin",
+      "tags": [
+        "pickup"
+      ],
+      "w": 0.6,
+      "z": 2
+    },
+    "flag": {
+      "h": 2,
+      "kind": "flag",
+      "sprite": "flag",
+      "w": 1,
+      "z": 1
+    },
+    "lift": {
+      "h": 1,
+      "kind": "lift",
+      "physics": "kinematic",
+      "script": "mover",
+      "solid": "platform",
+      "speed": 2.5,
+      "sprite": "lift",
+      "vx": 2.5,
+      "w": 3,
+      "z": 1
+    },
+    "player": {
+      "buffer": 0,
+      "coyote": 0,
+      "flip": "auto",
+      "gravity": 1,
+      "h": 0.9,
+      "kind": "player",
+      "physics": true,
+      "script": "player",
+      "sprite": "knight",
+      "tags": [
+        "player"
+      ],
+      "w": 0.75,
+      "z": 5
+    },
+    "slime": {
+      "dir": -1,
+      "flip": "auto",
+      "h": 0.7,
+      "kind": "slime",
+      "physics": true,
+      "script": "slime",
+      "speed": 2.0,
+      "sprite": "slime",
+      "tags": [
+        "enemy"
+      ],
+      "w": 0.9,
+      "z": 3
+    }
+  },
+  "hud": {
+    "a_lives": "Lives ♥♥♥",
+    "b_coins": "Coins 0 / 18",
+    "c_msg": "Arrows or WASD to move, Space to jump. Reach the flag!"
+  }
+}

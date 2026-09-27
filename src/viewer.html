@@ -50,7 +50,7 @@
 
   #view { grid-area: view; position: relative; background: #0a0c10; min-height: 0; min-width: 0; display: grid; place-items: center; overflow: hidden; }
   #view.gamefocus { box-shadow: inset 0 0 0 2px var(--you); }
-  #c { display: block; border-radius: 4px; box-shadow: 0 10px 40px #0008; image-rendering: pixelated; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
   .tools { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; pointer-events: none; }
   .tools > * { pointer-events: auto; }
   .tools .box { display: flex; gap: 4px; align-items: center; background: #151821e6; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
@@ -181,7 +181,7 @@
     <button id="play" title="Run the game in real time (Space when paused, Esc to stop)">▶ Play</button>
     <button id="step" title="Advance one tick (.)">⏭ Step</button>
     <select id="tps" title="Ticks per second while playing">
-      <option>2</option><option>4</option><option selected>8</option><option>15</option><option>30</option><option>60</option>
+      <option>2</option><option>4</option><option selected>8</option><option>15</option><option>30</option><option>60</option><option>120</option>
     </select>
     <span class="tick">tick <b id="tick">–</b></span>
     <span class="sep"></span>
@@ -215,13 +215,17 @@
         <select id="place" title="What to place"></select>
         <button data-tool="erase" title="Delete entity (E)">✖ Erase</button>
       </div>
+      <div class="box">
+        <button id="viewbtn" title="Edit view shows the whole map; Game view shows what the player sees through the camera">🎥 Auto view</button>
+        <button id="fitbtn" title="Fit the whole map (mouse wheel zooms, middle-drag or Alt+drag pans)">⤢</button>
+      </div>
     </div>
     <div class="recover" id="recover"><span id="rectext"></span><button id="recyes">Restore</button><button id="recno">Discard</button></div>
     <div class="banner" id="banner">🎮 keyboard controls the game · Esc to stop</div>
     <div class="replay" id="replay"><span id="behind"></span><button id="live">Jump to live</button></div>
     <div id="toasts"></div>
     <div id="props"></div>
-    <div class="hint" id="hint">Click anything, even walls · Shift+drag paints a box · Space play · . step · V B P E tools · Ctrl+Z undo</div>
+    <div class="hint" id="hint">Click anything · wheel zooms · Alt+drag pans · Shift+drag paints a box · Space play · Ctrl+Z undo</div>
   </section>
 
   <section class="panel" id="insp">
@@ -266,6 +270,7 @@ or a JSON command, e.g.  {"cmd":"step","ticks":50}
 </div></div>
 <div id="drop">Drop images (→ sprites), maps (.txt .csv .tmj), scripts (.rhai) or worlds (.json)</div>
 
+<script src="/render.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const cv = $('c');
@@ -346,31 +351,47 @@ function toast(text, by) {
 let maps = {}, queue = [], cur = null, prev = null, fetched = 0, first = true, lastAdvance = 0;
 let pulses = [], TS = 24, lastAgent = -1e9;
 
-async function poll() {
-  try {
-    const d = await (await fetch('/frames?after=' + fetched)).json();
-    if (d.latest < fetched) { fetched = 0; queue = []; cur = null; }  // engine restarted
-    Object.assign(maps, d.maps);
-    if (d.frames.length) {
-      fetched = d.frames[d.frames.length - 1].seq;
-      queue.push(...d.frames);
-      if (first) {
-        for (const f of queue.slice(-400)) if (f.note) logNote(f, false);
-        cur = queue[queue.length - 1]; queue = [];
-      }
+function ingest(d) {
+  if (d.latest < fetched) { fetched = 0; queue = []; cur = null; }  // engine restarted
+  Object.assign(maps, d.maps);
+  if (d.frames.length) {
+    fetched = d.frames[d.frames.length - 1].seq;
+    queue.push(...d.frames);
+    if (first) {
+      for (const f of queue.slice(-400)) if (f.note) logNote(f, false);
+      cur = queue[queue.length - 1]; queue = [];
     }
-    first = false;
-  } catch (e) {}
+  }
+  first = false;
+}
+// Frames arrive live over server-sent events; fall back to polling if that fails.
+async function connect() {
+  try { ingest(await (await fetch('/frames?after=' + fetched)).json()); } catch (e) {}
+  if (!window.EventSource) return poll();
+  const src = new EventSource('/stream?after=' + fetched);
+  src.onmessage = ev => { try { ingest(JSON.parse(ev.data)); } catch (e) {} };
+  src.onerror = () => { src.close(); setTimeout(connect, 1000); };
+}
+async function poll() {
+  try { ingest(await (await fetch('/frames?after=' + fetched)).json()); } catch (e) {}
   setTimeout(poll, 100);
 }
 function replaySpeed() {
   const backlog = queue.length;
-  return backlog > 200 ? 60 : backlog > 40 ? 30 : Math.max(15, es && es.playing ? +es.tps : 15);
+  const live = es && es.playing ? +es.tps : 15;
+  return backlog > 200 ? Math.max(120, live) : backlog > 40 ? Math.max(60, live) : Math.max(15, live);
 }
 function advance(now) {
+  // Live play: always show the newest frame (never lag behind the game). Skipped frames
+  // still log their notes and events. Replay pacing is for bursts while paused.
+  if (es && es.playing && queue.length > 2) {
+    while (queue.length > 1) show(queue.shift());
+  }
   if (!queue.length || now - lastAdvance < 1000 / replaySpeed()) return;
-  show(queue.shift());
-  lastAdvance = now;
+  // Several frames may be due at once (e.g. a 60 Hz stream on a slow display).
+  let n = 0;
+  while (queue.length && n < 8 && (n === 0 || now - lastAdvance >= 1000 / replaySpeed())) { show(queue.shift()); lastAdvance += 1000 / replaySpeed(); n++; }
+  if (now - lastAdvance > 100) lastAdvance = now;
 }
 function show(f, jumped) {
   prev = (jumped || f.jump) ? null : cur;
@@ -412,34 +433,14 @@ function logEvent(tick, ev) {
   addLog(ev.kind === 'script_error' ? 'err' : 'ev', tick, `<b>${esc(ev.kind)}</b> ${esc(data)}`);
 }
 
-// ---------- sprites ----------
-const spriteCache = new Map();
-function spriteCanvas(name) {
-  const sp = es && es.sprites[name];
-  if (!sp) return null;
-  const key = name + JSON.stringify(sp);
-  let c = spriteCache.get(name);
-  if (c && c._key === key) return c;
-  const h = sp.pixels.length, w = Math.max(1, ...sp.pixels.map(r => [...r].length));
-  c = document.createElement('canvas'); c.width = w; c.height = h; c._key = key;
-  const g = c.getContext('2d');
-  sp.pixels.forEach((row, y) => [...row].forEach((ch, x) => {
-    const col = sp.palette[ch];
-    if (col && ch !== '.' && ch !== ' ') { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
-  }));
-  spriteCache.set(name, c);
-  return c;
-}
-function drawSprite(g, name, x, y, size) {
-  const c = spriteCanvas(name);
-  if (!c) return false;
-  const s = size / Math.max(c.width, c.height);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(c, x + (size - c.width * s) / 2, y + (size - c.height * s) / 2, c.width * s, c.height * s);
-  return true;
-}
-function hue(s) { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
-const colorOf = (kind, c) => c || `hsl(${hue(kind)} 68% 62%)`;
+// ---------- sprites & tiles (the shared renderer does the drawing) ----------
+const FR = window.ForgeRender;
+const spriteCanvas = name => FR.spriteCanvas(name);
+const drawSprite = (g, name, x, y, size) => FR.drawSprite(g, name, x, y, size, size);
+const hue = s => FR.hue(s);
+const colorOf = (kind, c) => FR.colorOf(kind, c);
+// Draws one tile with the current ctx/TS (asset cards and the tile inspector swap these).
+const drawTile = (ch, px, py, x, y) => FR.drawTile(ctx, ch, px, py, TS, x, y);
 function swatch(e) {
   // A small preview: sprite if the entity has one, else colored glyph square.
   if (e.sprite && spriteCanvas(e.sprite)) {
@@ -452,113 +453,94 @@ function swatch(e) {
   return s;
 }
 
-// ---------- drawing ----------
-let hover = null, drag = null, paint = null;
+// ---------- the viewport ----------
+let hover = null, drag = null, paint = null, panning = null;
+let V = null;                 // current view: tiles -> screen pixels
+let viewMode = 'auto';        // auto (game view while playing with a camera) | edit | game
+let zoom = 1, pan = null;     // edit view zoom/pan (pan = tile coords of the center)
 
-function drawTile(ch, px, py, x, y) {
-  const def = es && es.tiles[ch];
-  if (def && def.sprite && spriteCanvas(def.sprite)) {
-    ctx.fillStyle = '#12141a'; ctx.fillRect(px, py, TS, TS);
-    drawSprite(ctx, def.sprite, px, py, TS);
-    return;
-  }
-  if (def && def.color) {
-    ctx.fillStyle = def.color; ctx.fillRect(px, py, TS, TS);
-    if (def.solid) { ctx.fillStyle = '#ffffff18'; ctx.fillRect(px, py, TS, Math.max(2, TS / 8)); }
-    return;
-  }
-  if (ch === '#') {
-    ctx.fillStyle = '#2c313d'; ctx.fillRect(px, py, TS, TS);
-    ctx.fillStyle = '#3a4152'; ctx.fillRect(px, py, TS, Math.max(2, TS / 8));
-    ctx.fillStyle = '#23272f'; ctx.fillRect(px, py + TS - 1, TS, 1);
-  } else if (ch === ' ') {
-    ctx.fillStyle = '#0a0c10'; ctx.fillRect(px, py, TS, TS);
-  } else {
-    ctx.fillStyle = (x + y) % 2 ? '#13151c' : '#12141a'; ctx.fillRect(px, py, TS, TS);
-    if (ch !== '.') {
-      ctx.fillStyle = '#4a5268'; ctx.font = `${TS * .7}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(ch, px + TS / 2, py + TS / 2);
-    }
-  }
+function mode() {
+  if (viewMode !== 'auto') return viewMode;
+  const cam = cur && cur.camera;
+  return es && es.playing && cam && cam.view && cam.view[0] > 0 ? 'game' : 'edit';
 }
+const toS = (x, y) => FR.toScreen(V, x, y);
+const box = e => { const ex = e[7] || {}; return { x: e[2], y: e[3], w: ex.w ?? 1, h: ex.h ?? 1 }; };
 
 function draw(now) {
   advance(now);
   requestAnimationFrame(draw);
   if (!cur) return;
   const rows = maps[cur.map] || [];
-  const W = Math.max(1, ...rows.map(r => r.length)), H = rows.length || 1;
-  const box = $('view').getBoundingClientRect();
-  TS = Math.max(6, Math.min(48, Math.floor(Math.min((box.width - 40) / W, (box.height - 100) / H))));
-  if (cv.width !== W * TS || cv.height !== H * TS) { cv.width = W * TS; cv.height = H * TS; }
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = devicePixelRatio || 1;
+  if (!W || !H) return;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   $('empty').hidden = true; cv.hidden = false;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = mode();
+  V = FR.makeView(cur, rows, W, H, m === 'game' ? { mode: 'camera', now } : { mode: 'map', zoom, pan, margin: 36 });
+  TS = V.s;
+  const t = prev ? Math.min(1, (now - lastAdvance) / (1000 / replaySpeed())) : 1;
+  FR.drawFrame(ctx, cur, rows, V, {
+    prev, t, now, hudTop: 56,
+    skip: drag ? drag.id : null,
+    tileAt: paint ? (x, y, ch) => paint.cells.has(x + ',' + y) ? paint.tile : ch : null,
+  });
+  const S = V.s;
 
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    let ch = rows[y][x] ?? ' ';
-    if (paint && paint.cells.has(x + ',' + y)) ch = paint.tile;
-    drawTile(ch, x * TS, y * TS, x, y);
+  // the camera's window, while editing
+  const cam = cur.camera || {};
+  if (m === 'edit' && cam.view && cam.view[0] > 0) {
+    const z = cam.zoom > 0 ? cam.zoom : 1, vw = cam.view[0] / z, vh = cam.view[1] / z;
+    const [cx, cy] = toS(cam.x - vw / 2, cam.y - vh / 2);
+    ctx.strokeStyle = '#5fd39a88'; ctx.lineWidth = 1.5; ctx.setLineDash([8, 6]);
+    ctx.strokeRect(cx, cy, vw * S, vh * S); ctx.setLineDash([]);
+    ctx.fillStyle = '#5fd39acc'; ctx.font = '11px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('camera', cx + 4, cy - 2);
   }
   if (selCell) {
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-    ctx.strokeRect(selCell.x * TS + 1, selCell.y * TS + 1, TS - 2, TS - 2); ctx.setLineDash([]);
+    const [x, y] = toS(selCell.x, selCell.y);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(x + 1, y + 1, S - 2, S - 2); ctx.setLineDash([]);
   }
-  if (hover && tool !== 'select') {
-    ctx.strokeStyle = tool === 'erase' ? '#ff6b6b' : '#7aa2ff'; ctx.lineWidth = 2;
-    ctx.strokeRect(hover.x * TS + 1, hover.y * TS + 1, TS - 2, TS - 2);
+  if (hover && tool !== 'select' && !panning) {
+    const [x, y] = toS(Math.floor(hover.wx), Math.floor(hover.wy));
+    ctx.strokeStyle = tool === 'erase' ? '#ff6b6b' : '#7aa2ff'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, S - 2, S - 2);
   }
-
-  const t = prev ? Math.min(1, (now - lastAdvance) / (1000 / replaySpeed())) : 1;
-  const ease = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-  const before = new Map((prev ? prev.ents : []).map(e => [e[0], e]));
-  const ids = new Set(cur.ents.map(e => e[0]));
-  const ent = (e, x, y, a) => {
-    const px = x * TS, py = y * TS, r = TS * .42, cx = px + TS / 2, cy = py + TS / 2;
-    ctx.globalAlpha = a;
-    if (!(e[6] && drawSprite(ctx, e[6], px, py, TS))) {
-      ctx.fillStyle = colorOf(e[4], e[5]);
-      ctx.beginPath(); ctx.roundRect(cx - r, cy - r, r * 2, r * 2, r * .45); ctx.fill();
-      ctx.fillStyle = '#0d0f14'; ctx.font = `bold ${TS * .55}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(e[1], cx, cy + 1);
-    }
-    if (e[0] === selected) {
-      const recent = now - agentSel < 1500;
-      ctx.strokeStyle = recent ? '#b48cff' : '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.roundRect(cx - r - 3, cy - r - 3, r * 2 + 6, r * 2 + 6, r * .5); ctx.stroke(); ctx.setLineDash([]);
-    }
-    ctx.globalAlpha = 1;
-  };
-  for (const e of before.values()) if (!ids.has(e[0])) ent(e, e[2], e[3], 1 - ease);
-  for (const e of cur.ents) {
-    if (drag && drag.id === e[0]) continue;
-    const p = before.get(e[0]);
-    if (p) ent(e, p[2] + (e[2] - p[2]) * ease, p[3] + (e[3] - p[3]) * ease, 1);
-    else ent(e, e[2], e[3], prev ? ease : 1);
+  // the dragged entity follows the mouse
+  if (drag && hover) {
+    const e = cur.ents.find(e => e[0] === drag.id);
+    if (e) FR.drawEntity(ctx, e, dragPos().x, dragPos().y, V, .75);
   }
-  if (drag && hover) { const e = cur.ents.find(e => e[0] === drag.id); if (e) ent(e, hover.x, hover.y, .75); }
+  // selection outline
+  const sel = cur.ents.find(e => e[0] === selected);
+  if (sel && !drag) {
+    const b = box(sel), [x, y] = toS(b.x, b.y);
+    ctx.strokeStyle = now - agentSel < 1500 ? '#b48cff' : '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.roundRect(x - 3, y - 3, b.w * S + 6, b.h * S + 6, 5); ctx.stroke(); ctx.setLineDash([]);
+  }
 
   pulses = pulses.filter(p => now - p.t0 < 700);
   for (const p of pulses) {
-    const k = (now - p.t0) / 700;
+    const k = (now - p.t0) / 700, [x, y] = toS(p.x + .5, p.y + .5);
     ctx.strokeStyle = p.bad ? `rgba(255,95,95,${1 - k})` : `rgba(255,215,110,${1 - k})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p.x * TS + TS / 2, p.y * TS + TS / 2, TS * (.45 + k * .9), 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, S * (.45 + k * .9), 0, Math.PI * 2); ctx.stroke();
   }
 
   // agent markers
   markers = markers.filter(m => now - m.t0 < 6000);
-  for (const m of markers) {
-    const k = ((now - m.t0) % 1000) / 1000, fade = Math.min(1, (6000 - (now - m.t0)) / 800);
-    const cx = m.x * TS + TS / 2, cy = m.y * TS + TS / 2;
+  for (const mk of markers) {
+    const k = ((now - mk.t0) % 1000) / 1000, fade = Math.min(1, (6000 - (now - mk.t0)) / 800);
+    const [cx, cy] = toS(mk.x + .5, mk.y + .5);
     ctx.globalAlpha = fade;
     ctx.strokeStyle = '#b48cff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(cx, cy, TS * (.55 + k * .6), 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#b48cff'; ctx.beginPath(); ctx.moveTo(cx, cy - TS * .55); ctx.lineTo(cx - 6, cy - TS * .55 - 12); ctx.lineTo(cx + 6, cy - TS * .55 - 12); ctx.fill();
-    if (m.label) {
-      ctx.font = 'bold 12px system-ui'; const w = ctx.measureText(m.label).width + 14;
-      const lx = Math.min(Math.max(cx - w / 2, 2), cv.width - w - 2), ly = Math.max(cy - TS * .55 - 34, 2);
+    ctx.beginPath(); ctx.arc(cx, cy, S * (.55 + k * .6), 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#b48cff'; ctx.beginPath(); ctx.moveTo(cx, cy - S * .55); ctx.lineTo(cx - 6, cy - S * .55 - 12); ctx.lineTo(cx + 6, cy - S * .55 - 12); ctx.fill();
+    if (mk.label) {
+      ctx.font = 'bold 12px system-ui'; const w = ctx.measureText(mk.label).width + 14;
+      const lx = Math.min(Math.max(cx - w / 2, 2), W - w - 2), ly = Math.max(cy - S * .55 - 34, 2);
       ctx.fillStyle = '#1d1730f0'; ctx.beginPath(); ctx.roundRect(lx, ly, w, 20, 6); ctx.fill();
       ctx.strokeStyle = '#b48cff'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = '#e9e0ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(m.label, lx + 7, ly + 10);
+      ctx.fillStyle = '#e9e0ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(mk.label, lx + 7, ly + 10);
     }
     ctx.globalAlpha = 1;
   }
@@ -566,28 +548,17 @@ function draw(now) {
   // open requests the user pinned for the agent
   for (const r of (es ? es.requests : []).filter(r => r.status === 'open')) {
     const at = r.entity && cur.ents.find(e => e[0] === r.entity.id);
-    const x = at ? at[2] : r.x, y = at ? at[3] : r.y;
-    const bx = x * TS + TS - 4, by = y * TS + 4, rr = Math.max(7, TS * .22);
-    ctx.fillStyle = '#f0b35a'; ctx.beginPath(); ctx.arc(bx, by, rr, 0, Math.PI * 2); ctx.fill();
+    const b = at ? box(at) : { x: r.x, y: r.y, w: 1, h: 1 };
+    const [bx, by] = toS(b.x + b.w, b.y), rr = Math.max(7, S * .22);
+    ctx.fillStyle = '#f0b35a'; ctx.beginPath(); ctx.arc(bx - 4, by + 4, rr, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#0d0f14'; ctx.font = `bold ${rr * 1.3}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('?', bx, by + 1);
-  }
-
-  // HUD
-  const hud = Object.values(cur.hud || {});
-  if (hud.length) {
-    ctx.font = `bold ${Math.max(12, Math.min(18, TS * .6))}px ui-monospace, monospace`;
-    const lh = Math.max(16, Math.min(24, TS * .8));
-    const w = Math.max(...hud.map(s => ctx.measureText(s).width)) + 16;
-    ctx.fillStyle = '#000a'; ctx.beginPath(); ctx.roundRect(6, 6, w, hud.length * lh + 8, 6); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    hud.forEach((s, i) => ctx.fillText(s, 14, 10 + i * lh));
+    ctx.fillText('?', bx - 4, by + 5);
   }
 
   $('tick').textContent = cur.tick;
   const behind = queue.length;
-  $('replay').style.display = behind > 3 ? 'flex' : 'none';
-  $('hint').style.display = behind > 3 ? 'none' : '';
+  $('replay').style.display = behind > 12 ? 'flex' : 'none';
+  $('hint').style.display = behind > 12 ? 'none' : '';
   $('behind').textContent = `▶ replaying · ${behind} ticks behind`;
   const active = now - lastAgent < 2500;
   $('agent').className = 'pill' + (active ? ' live' : '');
@@ -595,21 +566,37 @@ function draw(now) {
   const gameKeys = es && es.playing && !typing();
   $('banner').style.display = gameKeys ? 'block' : 'none';
   $('view').classList.toggle('gamefocus', !!gameKeys);
+  $('viewbtn').textContent = { auto: `🎥 ${m === 'game' ? 'Game' : 'Edit'} view (auto)`, edit: '🗺 Edit view', game: '🎥 Game view' }[viewMode];
 }
 
 // ---------- viewport interaction ----------
-function tileAt(ev) {
+function pointAt(ev) {
   const b = cv.getBoundingClientRect();
-  return { x: Math.floor((ev.clientX - b.left) / TS), y: Math.floor((ev.clientY - b.top) / TS) };
+  const [wx, wy] = FR.toWorld(V, ev.clientX - b.left, ev.clientY - b.top);
+  return { wx, wy, x: Math.floor(wx), y: Math.floor(wy), sx: ev.clientX, sy: ev.clientY, shift: ev.shiftKey };
 }
-const entsAt = p => cur ? cur.ents.filter(e => e[2] === p.x && e[3] === p.y).sort((a, b) => b[0] - a[0]) : [];
+// Entities under a point, topmost first.
+const entsAt = p => cur ? cur.ents.filter(e => { const b = box(e); return p.wx >= b.x && p.wx < b.x + b.w && p.wy >= b.y && p.wy < b.y + b.h; })
+  .sort((a, b) => ((b[7] || {}).z || 0) - ((a[7] || {}).z || 0) || b[0] - a[0]) : [];
+// Where a dragged entity lands: whole tiles, or eighths of a tile with Shift.
+function dragPos() {
+  const snap = v => hover.shift ? Math.round(v * 8) / 8 : Math.round(v);
+  return { x: snap(hover.wx - drag.ox), y: snap(hover.wy - drag.oy) };
+}
 
 cv.addEventListener('mousedown', ev => {
-  if (!cur || ev.button !== 0) return;
+  if (!cur || !V) return;
   document.activeElement.blur();
-  const p = tileAt(ev), here = entsAt(p);
+  const p = pointAt(ev);
+  if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
+    ev.preventDefault();
+    if (mode() === 'edit') { const [cx, cy] = FR.toWorld(V, cv.clientWidth / 2, cv.clientHeight / 2); pan = { x: cx, y: cy }; panning = { sx: ev.clientX, sy: ev.clientY, px: pan.x, py: pan.y }; }
+    return;
+  }
+  if (ev.button !== 0) return;
+  const here = entsAt(p);
   if (tool === 'select') {
-    if (here.length) { select(here[0][0]); drag = { id: here[0][0], from: p }; }
+    if (here.length) { const e = here[0]; select(e[0]); drag = { id: e[0], ox: p.wx - e[2], oy: p.wy - e[3], from: { x: e[2], y: e[3] } }; hover = p; }
     else selectCell(p);
   } else if (tool === 'paint') {
     paint = { tile: $('ptile').value || '#', cells: new Set([p.x + ',' + p.y]), rect: ev.shiftKey ? p : null };
@@ -621,8 +608,12 @@ cv.addEventListener('mousedown', ev => {
 });
 let hoverSent = '', hoverTimer = null;
 cv.addEventListener('mousemove', ev => {
-  if (!cur) return;
-  hover = tileAt(ev);
+  if (!cur || !V) return;
+  if (panning) {
+    pan = { x: panning.px - (ev.clientX - panning.sx) / V.s, y: panning.py - (ev.clientY - panning.sy) / V.s };
+    return;
+  }
+  hover = pointAt(ev);
   if (paint && paint.rect) {
     paint.cells = new Set();
     const [x0, x1] = [Math.min(paint.rect.x, hover.x), Math.max(paint.rect.x, hover.x)];
@@ -633,7 +624,8 @@ cv.addEventListener('mousemove', ev => {
   const hk = hover.x + ',' + hover.y;
   if (hk !== hoverSent) {
     hoverSent = hk; clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'ui', hover: [hover.x, hover.y] }) }), 150);
+    const h = [hover.x, hover.y];
+    hoverTimer = setTimeout(() => fetch('/api/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'ui', hover: h }) }), 150);
   }
   const here = entsAt(hover), tip = $('tip');
   if (!here.length || drag || paint) { tip.style.display = 'none'; return; }
@@ -641,11 +633,27 @@ cv.addEventListener('mousemove', ev => {
   tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY + 14 + 'px'; tip.style.display = 'block';
 });
 cv.addEventListener('mouseleave', () => { hover = null; $('tip').style.display = 'none'; });
+cv.addEventListener('wheel', ev => {
+  if (!V || mode() !== 'edit') return;
+  ev.preventDefault();
+  const b = cv.getBoundingClientRect(), mx = ev.clientX - b.left, my = ev.clientY - b.top;
+  const [wx, wy] = FR.toWorld(V, mx, my);
+  if (!pan) { const [cx, cy] = FR.toWorld(V, cv.clientWidth / 2, cv.clientHeight / 2); pan = { x: cx, y: cy }; }
+  zoom = Math.min(12, Math.max(0.2, zoom * (ev.deltaY < 0 ? 1.15 : 1 / 1.15)));
+  // keep the tile under the mouse in place
+  const V2 = FR.makeView(cur, maps[cur.map] || [], cv.clientWidth, cv.clientHeight, { mode: 'map', zoom, pan, margin: 36 });
+  const [wx2, wy2] = FR.toWorld(V2, mx, my);
+  pan = { x: pan.x + wx - wx2, y: pan.y + wy - wy2 };
+}, { passive: false });
+cv.addEventListener('auxclick', ev => { if (ev.button === 1) ev.preventDefault(); });
 window.addEventListener('mouseup', () => {
+  if (panning) { panning = null; return; }
   if (drag) {
-    const p = hover;
-    if (p && (p.x !== drag.from.x || p.y !== drag.from.y))
-      cmd({ cmd: 'batch', atomic: true, commands: [{ cmd: 'set', id: drag.id, key: 'x', value: p.x }, { cmd: 'set', id: drag.id, key: 'y', value: p.y }] });
+    if (hover) {
+      const p = dragPos();
+      if (p.x !== drag.from.x || p.y !== drag.from.y)
+        cmd({ cmd: 'batch', atomic: true, commands: [{ cmd: 'set', id: drag.id, key: 'x', value: p.x }, { cmd: 'set', id: drag.id, key: 'y', value: p.y }] });
+    }
     drag = null;
   }
   if (paint) {
@@ -654,12 +662,13 @@ window.addEventListener('mouseup', () => {
     cmd({ cmd: 'paint', tile: p.tile, cells }).then(() => { if (paint === p) paint = null; });
   }
 });
+function fitView() { zoom = 1; pan = null; }
 
 async function placeAt(p) {
   let v = $('place').value;
   if (!v) return;
   if (v === '__new') {
-    const kind = (prompt('New entity kind (e.g. "tree", "enemy"):') || '').trim();
+    const kind = (await ask('New entity kind', 'e.g. "tree", "enemy", "door"')) || '';
     if (!kind) return;
     v = 'kind:' + kind;
   }
@@ -668,7 +677,7 @@ async function placeAt(p) {
   if (type === 'prefab') r = await cmd({ cmd: 'create', prefab: name, x: p.x, y: p.y });
   else {
     const tpl = es && es.entities.find(e => e.kind === name), props = {};
-    if (tpl) for (const [k, val] of Object.entries(tpl)) if (!['id', 'kind', 'x', 'y'].includes(k)) props[k] = val;
+    if (tpl) for (const [k, val] of Object.entries(tpl)) if (!['id', 'kind', 'x', 'y', 'vx', 'vy', 'on_ground', 'hit_wall', 'hit_ceiling', 'ground_id', 'on_ladder'].includes(k)) props[k] = val;
     r = await cmd({ cmd: 'create', kind: name, x: p.x, y: p.y, props });
   }
   if (r.ok) select(r.id);
@@ -684,6 +693,8 @@ function setTool(t, push = true) {
 document.querySelectorAll('.tools [data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 $('ptile').onchange = () => { setTool('paint'); pushUi({ tile: $('ptile').value }); };
 $('place').onchange = () => { setTool('place'); pushUi({ place: $('place').value }); };
+$('viewbtn').onclick = () => { viewMode = { auto: 'edit', edit: 'game', game: 'auto' }[viewMode]; };
+$('fitbtn').onclick = fitView;
 
 // ---------- scene tree + inspector ----------
 function select(id) {
@@ -1121,7 +1132,7 @@ function cellMenu(ev, p) {
 cv.addEventListener('contextmenu', ev => {
   ev.preventDefault();
   if (!cur || !es) return;
-  const p = tileAt(ev), here = entsAt(p);
+  const p = pointAt(ev), here = entsAt(p);
   if (here.length) entityMenu(ev, here[0][0]); else cellMenu(ev, p);
 });
 $('tree').addEventListener('contextmenu', ev => {
@@ -1385,9 +1396,19 @@ function spritePng(name, scale = 8) {
   const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c0, 0, 0, c.width, c.height);
   const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = name + '.png'; a.click();
 }
+async function exportGame() {
+  const title = await ask('Export a playable game', 'One .html file anyone can double-click to play, on any computer or phone.', (es.path || 'my game').split(/[\\/]/).pop());
+  if (!title) return;
+  toast('Exporting…', 'you');
+  const r = await cmd({ cmd: 'export_game', title });
+  if (!r.ok) return toast('Export failed: ' + r.error, 'you');
+  toast(`Exported ${r.size_kb} KB → ${r.file}. Opening it…`, 'you');
+  if (r.url) window.open(r.url, '_blank');
+}
 $('export').onclick = ev => {
   const b = ev.target.getBoundingClientRect();
   menu(b.left, b.bottom + 4, 'Export', [
+    { label: '🎮 Playable game (.html, share with anyone)', run: exportGame },
     { label: '🌍 Whole world (.json, re-importable)', run: async () => { const r = await cmd({ cmd: 'export' }); if (r.ok) download(stem(es.path || 'world') + '.json', JSON.stringify(r.world, null, 2)); } },
     { label: '🗺 Map as text (.txt)', run: () => download('map.txt', (maps[cur.map] || []).join('\n') + '\n', 'text/plain') },
     { label: '🖼 Screenshot of the game (.png)', run: () => { const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'forge-screenshot.png'; a.click(); } },
@@ -1397,10 +1418,13 @@ $('export').onclick = ev => {
 };
 
 function renderAll() {
+  FR.setAssets(es.sprites, es.tiles);
   $('path').textContent = es.path || '(unsaved world)';
   $('play').textContent = es.playing ? '⏸ Pause' : '▶ Play';
   $('play').classList.toggle('on', es.playing);
-  if (es.playing) $('tps').value = String(es.tps);
+  const rate = String(es.playing ? es.tps : es.tick_rate);
+  if (![...$('tps').options].some(o => o.value === rate)) $('tps').add(new Option(rate, rate));
+  if (document.activeElement !== $('tps')) $('tps').value = rate;
   $('undo').disabled = !es.undo; $('redo').disabled = !es.redo;
   if (!$('save').textContent.startsWith('✓') && !$('save').textContent.startsWith('✗'))
     $('save').textContent = es.unsaved ? '💾 Save ●' : '💾 Save';
@@ -1442,7 +1466,7 @@ function renderAll() {
   renderTree(); renderInspector(); renderScripts(); renderAssets(); renderRequests(); renderProposals();
 }
 
-refresh(); poll(); requestAnimationFrame(draw);
+refresh(); connect(); requestAnimationFrame(draw);
 </script>
 </body>
 </html>

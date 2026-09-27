@@ -7,6 +7,13 @@ Set-Location $PSScriptRoot
 cargo build --release
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
 
+# The web player (the engine compiled to WebAssembly) that exported games run on.
+if (-not (rustup target list --installed | Select-String -Quiet 'wasm32-unknown-unknown')) {
+    rustup target add wasm32-unknown-unknown
+}
+cargo build --release -p forge-web --target wasm32-unknown-unknown
+if ($LASTEXITCODE -ne 0) { throw "web player build failed" }
+
 $app = Join-Path $PSScriptRoot 'app'
 New-Item -ItemType Directory -Force $app | Out-Null
 # A running exe can't be overwritten but can be renamed: move it aside so Forge (or a Claude
@@ -20,6 +27,7 @@ foreach ($exe in 'forge.exe', 'forge-app.exe') {
     }
     Copy-Item (Join-Path 'target\release' $exe) $dest
 }
+Copy-Item 'target\wasm32-unknown-unknown\release\forge_web.wasm' (Join-Path $app 'forge_web.wasm') -Force
 
 # Shortcuts on the Desktop and in the Start menu.
 $ws = New-Object -ComObject WScript.Shell

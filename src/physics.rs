@@ -8,6 +8,8 @@
 //!   platforms, projectiles). With `solid: true` (or `"platform"`) it carries whatever
 //!   stands on it.
 //! - Entities with `solid: true` / `"platform"` block dynamic bodies like tiles do.
+//! - The map's sides and top act as walls; below the bottom row is open, so bodies can
+//!   fall out of the world (scripts check `y > height()`).
 
 use crate::world::{Entity, World};
 use serde_json::{json, Value};
@@ -77,7 +79,9 @@ fn blocking(w: &World, solids: &[Solid], me: u64, (px, py): (f64, f64), (nx, ny)
             best = Some((limit, who));
         }
     };
-    for ty in y0..=y1 {
+    // Below the map is open (so things can fall into pits); the sides and top are walls.
+    let bottom = w.height();
+    for ty in y0..=y1.min(bottom - 1) {
         for tx in x0..=x1 {
             let c = w.tile(tx, ty);
             let def = w.tile_def(c);
@@ -251,9 +255,7 @@ pub fn step(w: &mut World) {
         p.insert("on_ground".into(), json!(on_ground));
         p.insert("hit_wall".into(), json!(hit_wall));
         p.insert("hit_ceiling".into(), json!(hit_ceiling));
-        if on_ladder || p.contains_key("on_ladder") {
-            p.insert("on_ladder".into(), json!(on_ladder));
-        }
+        p.insert("on_ladder".into(), json!(on_ladder));
         match ground_id {
             Some(g) => p.insert("ground_id".into(), json!(g)),
             None => p.remove("ground_id"),

@@ -4,3 +4,6 @@
 # autosaves and backups are local recovery data
 .autosave/
 /worlds/backup-*/
+
+# exported games
+/exports/

@@ -34,6 +34,24 @@ When forge runs as an MCP server, the editor is always on. Open it to watch an a
 If port 7878 is taken it tries the next ones (the `state` command reports the URL). `--port N` picks a port and
 `--no-editor` turns it off.
 
+## 2D physics, camera and export
+
+Units are tiles and seconds; an entity's `x`, `y` is the top-left of its `w` × `h` box. Grid games use whole numbers
+and never see a fraction.
+
+- `{"cmd":"physics","preset":"platformer"}` (gravity 60, 60 ticks/s), `"topdown"` or `"grid"`.
+- Entity props: `physics: true` (dynamic body) or `"kinematic"`, `vx`/`vy`, `w`/`h`, `gravity`, `drag`, `bounce`,
+  `max_speed`, `solid: true` or `"platform"` (moving platforms carry riders), `flip: "auto"`. The engine writes
+  `on_ground`, `hit_wall`, `hit_ceiling`, `on_ladder`, `ground_id`.
+- Tile types can be `solid`, one-way `platform` or `ladder`. Below the map is open, so things can fall into pits.
+- Scripts: `fn on_touch(me, other)`, `jump(me, tiles)`, `set_vel`, `raycast`, `can_see`, `camera_shake`… (see `help`).
+- `{"cmd":"camera","follow":1,"view":[24,14]}`; the editor's 🎥 Game view shows what the player sees.
+- `{"cmd":"step","ticks":120,"inputs":{"0":["right"],"18":["right","space"]}}` plays with scripted keys.
+- `{"cmd":"export_game","title":"My Game"}` writes `exports/My-Game.html`: one file with the engine (WebAssembly),
+  renderer and world inside. Double-click to play; it has touch buttons on phones.
+
+Demos: `worlds/coin-dash` (grid) and `worlds/skyward` (platformer, built by `examples/make_skyward.py`).
+
 ## As an MCP tool
 
 `forge --mcp [world_dir]` serves the same protocol over MCP as one batched `forge` tool:
@@ -52,6 +70,7 @@ See [ROADMAP.md](ROADMAP.md) for what's built and what's next.
 ## Development
 
 - `cargo test --release` replays every session in `tests/sessions/*.jsonl` (each line is a command plus the result it should give).
+- `node tests/wasm_smoke.mjs` checks the WebAssembly engine matches the native one.
 - `install.ps1` builds and updates the installed app in `app\`; it works even while Forge is open (the next launch picks up the new version).
 - Every command and its arguments are defined once in `src/commands.rs`; validation, `help` and the MCP tool schema are generated from it.
 

@@ -1,0 +1,11 @@
+# The Skyward platformer demo: loads cleanly, a scripted player clears the first hill,
+# falls into the pit, loses a life and respawns at the start. No script errors.
+{"cmd":"load","path":"worlds/skyward","expect":{"ok":true,"kinds":{"player":1,"slime":4,"coin":18,"lift":1,"flag":1,"checkpoint":1}}}
+{"cmd":"step","ticks":30}
+{"cmd":"get","id":1,"expect":{"entity":{"x":2,"y":13.1,"on_ground":true}}}
+{"cmd":"snapshot","name":"s"}
+{"cmd":"step","ticks":240,"inputs":{"0":["right"],"18":["right","space"],"30":["right"]},"until":"state(\"lives\") < 3","expect":{"until_hit":true}}
+{"cmd":"exec","code":"[state(\"lives\"), get(1).x, get(1).y]","expect":{"result":[2,2,13.1]}}
+{"cmd":"events","kinds":["script_error"],"expect":{"counts":{"script_error":null,"jump":1,"hurt":1}}}
+{"cmd":"restore","name":"s"}
+{"cmd":"trials","from":"s","runs":3,"ticks":120,"metric":"count(\"slime\")","expect":{"summary":{"metric_min":4,"metric_max":4}}}

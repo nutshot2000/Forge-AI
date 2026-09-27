@@ -44,7 +44,9 @@
   R.drawTile = (g, ch, px, py, size, x, y) => {
     const def = assets.tiles[ch];
     if (def && def.sprite && R.spriteCanvas(def.sprite)) {
-      g.fillStyle = '#12141a'; g.fillRect(px, py, size, size);
+      // See-through parts of a tile sprite show the floor tile behind them (e.g. sky).
+      if (ch !== '.') R.drawTile(g, '.', px, py, size, x, y);
+      else { g.fillStyle = '#12141a'; g.fillRect(px, py, size, size); }
       R.drawSprite(g, def.sprite, px, py, size, size);
       return;
     }
@@ -131,7 +133,7 @@
       if (p && Math.abs(p[2] - x) < 4 && Math.abs(p[3] - y) < 4) { dx = p[2] + (x - p[2]) * ease; dy = p[3] + (y - p[3]) * ease; }
       R.drawEntity(g, e, dx, dy, v);
     }
-    if (opts.hud !== false) R.drawHud(g, frame.hud, v);
+    if (opts.hud !== false) R.drawHud(g, frame.hud, v, opts.hudTop ?? 8);
   };
 
   R.drawEntity = (g, e, x, y, v, alpha = 1) => {
@@ -163,16 +165,16 @@
     g.restore();
   };
 
-  R.drawHud = (g, hud, v) => {
+  R.drawHud = (g, hud, v, top = 8) => {
     const lines = Object.values(hud || {});
     if (!lines.length) return;
     const fs = Math.round(Math.max(12, Math.min(20, v.ch / 32)));
     g.font = `bold ${fs}px ui-monospace, Consolas, monospace`;
     const lh = fs * 1.35;
     const w = Math.max(...lines.map(s => g.measureText(s).width)) + 18;
-    g.fillStyle = '#000a'; g.beginPath(); g.roundRect(8, 8, w, lines.length * lh + 10, 7); g.fill();
+    g.fillStyle = '#000a'; g.beginPath(); g.roundRect(8, top, w, lines.length * lh + 10, 7); g.fill();
     g.fillStyle = '#fff'; g.textAlign = 'left'; g.textBaseline = 'top';
-    lines.forEach((s, i) => g.fillText(s, 17, 13 + i * lh));
+    lines.forEach((s, i) => g.fillText(s, 17, top + 5 + i * lh));
   };
 
   // Key names shared with the engine: lowercase, arrows as up/down/left/right, " " as space.

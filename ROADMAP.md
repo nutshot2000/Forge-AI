@@ -4,7 +4,7 @@
 game: anything you can see or click, the agent can see and do in one command; each of you always knows what the
 other changed; and anything either of you does can be undone.
 
-Items have IDs (e.g. `P1.4`) so we can refer to them ("let's do P1.4 next"). ☐ = to do, ☑ = done.
+☑ = done, ◐ = partly done. Items have IDs (e.g. `P1.4`) so we can refer to them ("let's do P1.4 next"). ☐ = to do, ☑ = done.
 
 ---
 
@@ -51,28 +51,28 @@ So we can move fast later without breaking things.
 
 From grid-only to proper 2D, keeping grid mode for grid games.
 
-- ☐ **P1.1 Free-movement mode:** entities get pixel positions (`px`, `py`), size/hitbox, velocity (`vx`, `vy`); grid mode stays the default for grid games.
-- ☐ **P1.2 Fixed 60 Hz simulation** with smooth rendering (interpolation), separate from editor refresh.
-- ☐ **P1.3 Tile collision:** entities slide along walls and never pass through; `on_ground`, `hit_wall` flags; one-way platforms; ladders.
-- ☐ **P1.4 Gravity and physics presets:** gravity, friction, bounce, max speed as world or entity settings; `platformer` and `topdown` presets.
-- ☐ **P1.5 Entity collisions and triggers:** `fn on_touch(me, other)` hooks, trigger zones (areas that fire when entered), collision layers/masks.
-- ☐ **P1.6 Transform:** rotation, scale, flip, opacity, tint per entity.
-- ☐ **P1.7 Camera:** follow a target with smoothing, dead zone, map bounds, zoom, screen shake; `camera` command for the agent.
-- ☐ **P1.8 Big worlds:** maps of any size, stored in chunks, only nearby parts simulated/drawn; minimap.
+- ☑ **P1.1 Free-movement mode:** entities get pixel positions (`px`, `py`), size/hitbox, velocity (`vx`, `vy`); grid mode stays the default for grid games.
+- ☑ **P1.2 Fixed 60 Hz simulation** with smooth rendering (interpolation), separate from editor refresh.
+- ☑ **P1.3 Tile collision:** entities slide along walls and never pass through; `on_ground`, `hit_wall` flags; one-way platforms; ladders.
+- ☑ **P1.4 Gravity and physics presets:** gravity, friction, bounce, max speed as world or entity settings; `platformer` and `topdown` presets.
+- ☑ **P1.5 Entity collisions and triggers:** `fn on_touch(me, other)` hooks, trigger zones (areas that fire when entered), collision layers/masks.
+- ☑ **P1.6 Transform:** rotation, scale, flip, opacity, tint per entity.
+- ☑ **P1.7 Camera:** follow a target with smoothing, dead zone, map bounds, zoom, screen shake; `camera` command for the agent.
+- ◐ **P1.8 Big worlds:** maps of any size, stored in chunks, only nearby parts simulated/drawn; minimap. (Done: camera, only visible tiles drawn, editor zoom/pan. To do: chunked storage, minimap.)
 - ☐ **P1.9 Layers:** background, parallax layers, tiles, decorations, entities, foreground, UI; hide/lock per layer.
-- ☐ **P1.10 Raycasts and line of sight:** `raycast(x1,y1,x2,y2)`, `can_see(a,b)` for enemies, lasers and AI vision.
+- ☑ **P1.10 Raycasts and line of sight:** `raycast(x1,y1,x2,y2)`, `can_see(a,b)` for enemies, lasers and AI vision.
 - ☐ **P1.11 Pathfinding for free movement:** navigation over the tile grid, then smooth steering to follow the path.
-- ☐ **Milestone demo:** a small platformer (run, jump, stomp enemies, coins, moving platforms) built by the agent from one prompt.
+- ☑ **Milestone demo:** Skyward (`worlds/skyward`, built by `examples/make_skyward.py` through engine commands): run, jump with coyote time and buffering, stomp slimes, coins, one-way planks, a ladder, spikes, pits, a moving platform, checkpoint, flag, following camera.
 
 ## Phase 2: Runs anywhere (game runtime in the browser)
 
-- ☐ **P2.1 Compile the engine to WebAssembly** so the exact same simulation runs inside the editor window.
-- ☐ **P2.2 Smooth local Play mode:** Play runs in the window at 60 fps with instant input; the engine stays in charge of edits and the agent sees the live state.
-- ☐ **P2.3 Export as one playable `.html` file:** double-click to play, share with anyone.
+- ☑ **P2.1 Compile the engine to WebAssembly** so the exact same simulation runs inside the editor window.
+- ☑ **P2.2 Smooth local Play mode:** Play runs in the window at 60 fps with instant input; the engine stays in charge of edits and the agent sees the live state.
+- ☑ **P2.3 Export as one playable `.html` file:** double-click to play, share with anyone.
 - ☐ **P2.4 Publish to the web:** one click (or one agent command) publishes the game as a shareable page; itch.io-ready zip.
 - ☐ **P2.5 Controls:** gamepad support, on-screen touch controls for phones, key rebinding.
 - ☐ **P2.6 Export as a desktop `.exe`** (a stretch goal).
-- ☐ **Milestone:** Coin Dash and the platformer demo exported and playable on a phone.
+- ◐ **Milestone:** Coin Dash and the platformer demo exported and playable on a phone. (Export works and includes touch buttons; not yet tried on a real phone.)
 
 ## Phase 3: Art, animation and sound (all agent-writable text)
 
